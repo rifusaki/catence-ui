@@ -30,7 +30,10 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { chatSettingsSidebarOpenState } from '@/state/project';
 
 import { FormInput, TFormInputValue } from './FormInput';
-import { useChatSettingsSnapshotAtOpen } from './useChatSettingsSnapshotAtOpen';
+import {
+  configuredChatSettingsDefaults,
+  useChatSettingsSnapshotAtOpen
+} from './useChatSettingsSnapshotAtOpen';
 
 export default function ChatSettingsSidebar() {
   const { config } = useConfig();
@@ -100,7 +103,7 @@ export default function ChatSettingsSidebar() {
   });
 
   const handleReset = () => {
-    restoreSnapshot();
+    reset(configuredChatSettingsDefaults(inputsAtOpen, valuesAtOpen));
   };
 
   const handleChange = () => {};

@@ -6,7 +6,32 @@ export interface ChatSettingsSnapshotAtOpen {
   inputsAtOpen: unknown[];
 }
 
-/** Snapshots values + input schema when `isOpen` becomes true (Reset / cancel). */
+type ResettableInput = {
+  id?: string;
+  inputs?: ResettableInput[];
+  initial?: unknown;
+  resetValue?: unknown;
+};
+
+/** Return configured reset values while preserving fields without an input schema. */
+export function configuredChatSettingsDefaults(
+  inputs: unknown[],
+  currentValues: Record<string, unknown>
+): Record<string, unknown> {
+  const values = { ...currentValues };
+  const applyInput = (input: ResettableInput) => {
+    if (Array.isArray(input.inputs)) {
+      input.inputs.forEach(applyInput);
+      return;
+    }
+    if (!input.id) return;
+    values[input.id] = input.resetValue ?? input.initial;
+  };
+  inputs.forEach((input) => applyInput(input as ResettableInput));
+  return values;
+}
+
+/** Snapshots values + input schema when `isOpen` becomes true (cancel support). */
 export function useChatSettingsSnapshotAtOpen(
   isOpen: boolean,
   chatSettingsValue: Record<string, unknown>,

@@ -16,6 +16,7 @@ class InputWidget:
     tooltip: Optional[str] = None
     description: Optional[str] = None
     disabled: Optional[bool] = False
+    reset_value: Any = None
 
     def __post_init__(
         self,
@@ -123,6 +124,7 @@ class Select(InputWidget):
             "tooltip": self.tooltip,
             "description": self.description,
             "disabled": self.disabled,
+            "resetValue": self.reset_value,
         }
 
 
@@ -167,6 +169,7 @@ class NumberInput(InputWidget):
             "tooltip": self.tooltip,
             "description": self.description,
             "disabled": self.disabled,
+            "resetValue": self.reset_value,
         }
 
 

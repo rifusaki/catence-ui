@@ -26,7 +26,10 @@ import { Translator } from 'components/i18n';
 import { chatSettingsOpenState } from 'state/project';
 
 import { FormInput, TFormInputValue } from './FormInput';
-import { useChatSettingsSnapshotAtOpen } from './useChatSettingsSnapshotAtOpen';
+import {
+  configuredChatSettingsDefaults,
+  useChatSettingsSnapshotAtOpen
+} from './useChatSettingsSnapshotAtOpen';
 
 export default function ChatSettingsModal() {
   const { chatSettingsValue, chatSettingsInputs } = useChatData();
@@ -75,7 +78,7 @@ export default function ChatSettingsModal() {
   });
 
   const handleReset = () => {
-    restoreSnapshot();
+    reset(configuredChatSettingsDefaults(inputsAtOpen, valuesAtOpen));
   };
 
   // Legacy setField compatibility layer
