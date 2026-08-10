@@ -62,3 +62,5 @@ dist-ssr
 .dmypy.json
 
 .history
+# CocoIndex Code (ccc)
+/.cocoindex_code/

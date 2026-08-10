@@ -2,12 +2,7 @@ import { memo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSetRecoilState } from 'recoil';
 
-import {
-  useAudio,
-  useAuth,
-  useChatData,
-  useConfig
-} from '@chainlit/react-client';
+import { useAudio, useChatData, useConfig } from '@chainlit/react-client';
 
 import AudioPresence from '@/components/AudioPresence';
 import ButtonLink from '@/components/ButtonLink';
@@ -36,7 +31,6 @@ const Header = memo(() => {
   const { audioConnection } = useAudio();
   const navigate = useNavigate();
   const location = useLocation();
-  const { data } = useAuth();
   const { config } = useConfig();
   const { chatSettingsInputs } = useChatData();
   const { open, openMobile, isMobile } = useSidebar();
@@ -46,7 +40,7 @@ const Header = memo(() => {
 
   const sidebarOpen = isMobile ? openMobile : open;
 
-  const historyEnabled = data?.requireLogin && config?.dataPersistence;
+  const historyEnabled = config?.dataPersistence;
   const sidebarHidden = config?.ui?.default_sidebar_state === 'hidden';
 
   const links = config?.ui?.header_links || [];

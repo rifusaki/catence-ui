@@ -20,7 +20,7 @@ module.exports = {
   'backend/**/*.py': [
     'uv run scripts/lint.py --fix',
     'uv run scripts/format.py',
-    () => 'uv run scripts/type_check.py'
+    () => 'uv run --all-extras scripts/type_check.py'
   ],
 
   '.github/workflows/**': ['uv run actionlint']

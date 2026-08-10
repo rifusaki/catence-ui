@@ -1,10 +1,9 @@
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect } from 'react';
 import { useSetRecoilState } from 'recoil';
 
 import {
   ChainlitContext,
   useChatInteract,
-  useChatMessages,
   useChatSession,
   useConfig
 } from '@chainlit/react-client';
@@ -25,8 +24,6 @@ import {
 
 import { IAttachment, attachmentsState } from '@/state/chat';
 
-import { NewChatDialog } from './NewChat';
-
 interface Props {
   navigate?: (to: string) => void;
 }
@@ -35,11 +32,8 @@ export default function ChatProfiles({ navigate }: Props) {
   const apiClient = useContext(ChainlitContext);
   const { config } = useConfig();
   const { chatProfile, setChatProfile } = useChatSession();
-  const { firstInteraction } = useChatMessages();
   const { clear } = useChatInteract();
   const setAttachments = useSetRecoilState<IAttachment[]>(attachmentsState);
-  const [newChatProfile, setNewChatProfile] = useState<string | null>(null);
-  const [openDialog, setOpenDialog] = useState(false);
 
   // Early return check to prevent unnecessary renders and resource waste
   if (!config?.chatProfiles?.length || config.chatProfiles.length <= 1) {
@@ -65,18 +59,11 @@ export default function ChatProfiles({ navigate }: Props) {
     }
   }, [chatProfile, config.chatProfiles, setChatProfile]);
 
-  const handleClose = () => {
-    setOpenDialog(false);
-    setNewChatProfile(null);
-    navigate?.('/');
-  };
-
-  const handleConfirm = (profile: string) => {
+  const startChatWithProfile = (profile: string) => {
     setChatProfile(profile);
-    setNewChatProfile(null);
     setAttachments([]);
     clear();
-    handleClose();
+    navigate?.('/');
   };
 
   const allowHtml = config?.features?.unsafe_allow_html;
@@ -87,12 +74,7 @@ export default function ChatProfiles({ navigate }: Props) {
       <Select
         value={chatProfile || ''}
         onValueChange={(value) => {
-          setNewChatProfile(value);
-          if (firstInteraction) {
-            setOpenDialog(true);
-          } else {
-            handleConfirm(value);
-          }
+          startChatWithProfile(value);
         }}
       >
         <SelectTrigger
@@ -147,11 +129,6 @@ export default function ChatProfiles({ navigate }: Props) {
           })}
         </SelectContent>
       </Select>
-      <NewChatDialog
-        open={openDialog}
-        handleClose={handleClose}
-        handleConfirm={() => newChatProfile && handleConfirm(newChatProfile)}
-      />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { Navigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 
-import { sideViewState, useAuth, useConfig } from '@chainlit/react-client';
+import { sideViewState, useConfig } from '@chainlit/react-client';
 
 import ChatSettingsSidebar from '@/components/ChatSettings/ChatSettingsSidebar';
 import ElementSideView from '@/components/ElementSideView';
@@ -19,7 +19,6 @@ type Props = {
 
 const Page = ({ children }: Props) => {
   const { config } = useConfig();
-  const { data } = useAuth();
   const userEnv = useRecoilValue(userEnvState);
   const sideView = useRecoilValue(sideViewState);
 
@@ -53,7 +52,7 @@ const Page = ({ children }: Props) => {
     </div>
   );
 
-  const historyEnabled = config?.dataPersistence && data?.requireLogin;
+  const historyEnabled = config?.dataPersistence;
   const sidebarHidden = config?.ui?.default_sidebar_state === 'hidden';
 
   return (

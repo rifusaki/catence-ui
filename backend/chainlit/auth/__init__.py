@@ -6,6 +6,7 @@ from chainlit.config import config
 from chainlit.data import get_data_layer
 from chainlit.logger import logger
 from chainlit.oauth_providers import get_configured_oauth_providers
+from chainlit.user import User
 
 from .cookie import (
     OAuth2PasswordBearerWithCookie,
@@ -83,9 +84,24 @@ async def authenticate_user(token: str = Depends(reuseable_oauth)):
     return user
 
 
-async def get_current_user(token: str = Depends(reuseable_oauth)):
+async def get_current_user(token: str | None = Depends(reuseable_oauth)):
+    local_identifier = os.environ.get("CHAINLIT_LOCAL_USER")
+    if local_identifier:
+        local_user = User(
+            identifier=local_identifier, display_name="Local Catence user"
+        )
+        if data_layer := get_data_layer():
+            persisted_user = await data_layer.get_user(local_identifier)
+            if persisted_user is None:
+                persisted_user = await data_layer.create_user(local_user)
+            if persisted_user:
+                return persisted_user
+        return local_user
     if not require_login():
         return None
+
+    if token is None:
+        raise HTTPException(status_code=401, detail="Invalid authentication token")
 
     return await authenticate_user(token)
 

@@ -6,7 +6,6 @@ import { v4 as uuidv4 } from 'uuid';
 
 import {
   threadHistoryState,
-  useAuth,
   useChatData,
   useChatInteract,
   useChatMessages,
@@ -30,7 +29,6 @@ import ScrollContainer from './ScrollContainer';
 import WelcomeScreen from './WelcomeScreen';
 
 const Chat = () => {
-  const { user } = useAuth();
   const { config } = useConfig();
   const setAttachments = useSetRecoilState(attachmentsState);
   const setThreads = useSetRecoilState(threadHistoryState);
@@ -173,12 +171,7 @@ const Chat = () => {
 
   useEffect(() => {
     const currentPage = new URL(window.location.href);
-    if (
-      user &&
-      config?.dataPersistence &&
-      threadId &&
-      currentPage.pathname === '/'
-    ) {
+    if (config?.dataPersistence && threadId && currentPage.pathname === '/') {
       navigate(`/thread/${threadId}`);
     } else {
       setThreads((prev) => ({

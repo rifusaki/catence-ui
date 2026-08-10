@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 from typing import Any, Dict, Literal, Optional, Tuple, TypedDict, Union
 from urllib.parse import unquote
 
@@ -164,6 +165,8 @@ async def connect(sid: str, environ: WSGIEnvironment, auth: WebSocketSessionAuth
                 if thread and not (thread["userIdentifier"] == user.identifier):
                     logger.error("Authorization for the thread failed.")
                     raise ConnectionRefusedError("authorization failed")
+    elif os.environ.get("CHAINLIT_LOCAL_USER"):
+        user = await get_current_user(token=None)
 
     # Session scoped function to emit to the client
     def emit_fn(event, data):
