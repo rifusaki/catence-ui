@@ -1,13 +1,21 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   LS_DISPLAY_MODE_KEY,
   resolveDisplayMode
 } from '../../libs/copilot/src/resolveDisplayMode';
 
+const values = new Map<string, string>();
+const storage = {
+  getItem: (key: string) => values.get(key) ?? null,
+  setItem: (key: string, value: string) => values.set(key, value),
+  removeItem: (key: string) => values.delete(key)
+};
+
 describe('resolveDisplayMode – config vs localStorage precedence', () => {
   beforeEach(() => {
-    localStorage.removeItem(LS_DISPLAY_MODE_KEY);
+    values.clear();
+    vi.stubGlobal('localStorage', storage);
   });
 
   it('explicit config wins over localStorage', () => {

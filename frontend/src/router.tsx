@@ -2,6 +2,7 @@ import getRouterBasename from '@/lib/router';
 import { Navigate, createBrowserRouter } from 'react-router-dom';
 
 import AuthCallback from 'pages/AuthCallback';
+import Dashboard from 'pages/Dashboard';
 import Element from 'pages/Element';
 import Env from 'pages/Env';
 import Home from 'pages/Home';
@@ -17,6 +18,10 @@ export const router = createBrowserRouter(
     {
       path: '/env',
       element: <Env />
+    },
+    {
+      path: '/dashboard',
+      element: <Dashboard />
     },
     {
       path: '/thread/:id?',

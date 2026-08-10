@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useSetRecoilState } from 'recoil';
 
 import {
@@ -35,6 +35,7 @@ import UserNav from './UserNav';
 const Header = memo(() => {
   const { audioConnection } = useAudio();
   const navigate = useNavigate();
+  const location = useLocation();
   const { data } = useAuth();
   const { config } = useConfig();
   const { chatSettingsInputs } = useChatData();
@@ -74,6 +75,16 @@ const Header = memo(() => {
         )}
 
         <ChatProfiles navigate={navigate} />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ml-1 text-muted-foreground"
+          onClick={() =>
+            navigate(location.pathname === '/dashboard' ? '/' : '/dashboard')
+          }
+        >
+          {location.pathname === '/dashboard' ? 'Chat' : 'Dashboard'}
+        </Button>
       </div>
 
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
