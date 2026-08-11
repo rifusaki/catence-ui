@@ -1,0 +1,49 @@
+name: Publish Catence Chainlit
+
+on:
+  push:
+    tags: ['catence-v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v6
+      - name: Verify lockstep tag
+        run: |
+          version=$(python -c "from pathlib import Path; namespace = {}; exec(Path('backend/catence_release.py').read_text(), namespace); print(namespace['__version__'])")
+          test "$GITHUB_REF_NAME" = "catence-v$version"
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: uv build backend --wheel
+      - run: unzip -l dist/*.whl | grep -q 'chainlit/frontend/dist/index.html'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: catence-chainlit-wheel
+          path: dist/*.whl
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: catence-chainlit-wheel
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1

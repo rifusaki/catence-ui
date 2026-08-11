@@ -1,5 +1,5 @@
 [project]
-name = "chainlit"
+name = "catence-chainlit"
 dynamic = ["version"]
 keywords = [
     "LLM",
@@ -13,7 +13,7 @@ keywords = [
     "langchain",
     "conversational ai",
 ]
-description = "Build Conversational AI."
+description = "Catence-maintained Chainlit runtime with the bundled Catence Console frontend."
 authors = [
     { name = "Willy Douhard" },
     { name = "Dan Andre Constantini" }
@@ -64,9 +64,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://chainlit.io/"
-Documentation = "https://docs.chainlit.io/"
-Repository = "https://github.com/Chainlit/chainlit"
+Homepage = "https://github.com/rifusaki/catence"
+Documentation = "https://github.com/rifusaki/catence#readme"
+Repository = "https://github.com/rifusaki/catence-ui"
 
 [project.scripts]
 chainlit = "chainlit.cli:cli"
@@ -136,4 +136,4 @@ artifacts = [
 ]
 
 [tool.hatch.version]
-path = "chainlit/version.py"
+path = "catence_release.py"
