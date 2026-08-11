@@ -10,6 +10,7 @@ import {
 import BlinkingCursor from '@/components/BlinkingCursor';
 
 import { Message } from './Message';
+import ThinkingSteps from './ThinkingSteps';
 
 interface Props {
   messages: IStep[];
@@ -18,6 +19,8 @@ interface Props {
   indent: number;
   isRunning?: boolean;
   scorableRun?: IStep;
+  /** Suppress assistant messages while rendering a trace inside Thinking. */
+  hideMessageSteps?: boolean;
 }
 
 const CL_RUN_NAMES = ['on_chat_start', 'on_message', 'on_audio_end'];
@@ -41,8 +44,26 @@ const hasAssistantMessage = (step: IStep): boolean => {
   );
 };
 
+const collectAssistantMessages = (steps: IStep[]): IStep[] => {
+  return steps.flatMap((step) => {
+    if (step.type === 'assistant_message') {
+      return [step];
+    }
+
+    return step.steps ? collectAssistantMessages(step.steps) : [];
+  });
+};
+
 const Messages = memo(
-  ({ messages, elements, actions, indent, isRunning, scorableRun }: Props) => {
+  ({
+    messages,
+    elements,
+    actions,
+    indent,
+    isRunning,
+    scorableRun,
+    hideMessageSteps = false
+  }: Props) => {
     const messageContext = useContext(MessageContext);
 
     const lastAssistantMessage = useMemo(() => {
@@ -76,17 +97,37 @@ const Messages = memo(
             // Ignore on_chat_start for scorable run
             const scorableRun =
               !isRunning && m.name !== 'on_chat_start' ? m : undefined;
+            const thinkingSteps = m.steps?.filter(
+              (step) => step.type !== 'assistant_message'
+            );
+            const responseMessages =
+              !hideMessageSteps && m.steps
+                ? collectAssistantMessages(m.steps)
+                : [];
             return (
               <React.Fragment key={m.id}>
-                {m.steps?.length ? (
+                {responseMessages.length ? (
                   <Messages
-                    messages={m.steps}
+                    messages={responseMessages}
                     elements={elements}
                     actions={actions}
                     indent={indent}
                     isRunning={isRunning}
                     scorableRun={scorableRun}
                   />
+                ) : null}
+                {thinkingSteps?.length ? (
+                  <ThinkingSteps count={thinkingSteps.length}>
+                    <Messages
+                      messages={thinkingSteps}
+                      elements={elements}
+                      actions={actions}
+                      indent={indent}
+                      isRunning={isRunning}
+                      scorableRun={scorableRun}
+                      hideMessageSteps
+                    />
+                  </ThinkingSteps>
                 ) : null}
                 {(showToolCoTLoader || showHiddenCoTLoader) &&
                 m.name !== 'on_chat_start' ? (
@@ -117,6 +158,7 @@ const Messages = memo(
                 isRunning={isRunning}
                 scorableRun={_scorableRun}
                 isScorable={isScorable}
+                hideMessageSteps={hideMessageSteps}
               />
             );
           }

@@ -11,6 +11,7 @@ import {
 import { useLayoutMaxWidth } from 'hooks/useLayoutMaxWidth';
 
 import { Messages } from '..';
+import ThinkingSteps from '../ThinkingSteps';
 import { AskActionButtons } from './AskActionButtons';
 import { AskFileButton } from './AskFileButton';
 import { MessageAvatar } from './Avatar';
@@ -27,6 +28,7 @@ interface Props {
   isRunning?: boolean;
   isScorable?: boolean;
   scorableRun?: IStep;
+  hideMessageSteps?: boolean;
 }
 
 const EMPTY_ELEMENTS: IMessageElement[] = [];
@@ -39,7 +41,8 @@ const Message = memo(
     isRunning,
     indent,
     isScorable,
-    scorableRun
+    scorableRun,
+    hideMessageSteps = false
   }: Props) => {
     const { allowHtml, cot, latex, renderUserMarkdown, onError } =
       useContext(MessageContext);
@@ -56,6 +59,12 @@ const Message = memo(
     const skip = toolCallSkip || hiddenSkip;
     const showInputSection = Boolean(message.input && message.showInput);
     const shouldRenderOutput = !showInputSection || Boolean(message.output);
+    const traceSteps = message.steps?.filter(
+      (step) => !step.type.includes('message')
+    );
+    const childMessages = message.steps?.filter((step) =>
+      step.type.includes('message')
+    );
 
     const userMessageContent = useMemo(
       () => (
@@ -82,13 +91,17 @@ const Message = memo(
           indent={indent}
           isRunning={isRunning}
           scorableRun={scorableRun}
+          hideMessageSteps={hideMessageSteps}
         />
       );
     }
 
     return (
       <>
-        <div data-step-type={message.type} className="step py-2">
+        <div
+          data-step-type={message.type}
+          className={cn('step', isStep ? 'py-0.5' : 'py-2')}
+        >
           <div
             className="flex flex-col"
             style={{
@@ -108,7 +121,7 @@ const Message = memo(
                 </div>
               ) : (
                 <div className="ai-message flex gap-4 w-full">
-                  {!isStep || !indent ? (
+                  {!isStep ? (
                     <MessageAvatar
                       author={message.metadata?.avatarName || message.name}
                       isError={message.isError}
@@ -137,6 +150,7 @@ const Message = memo(
                           actions={actions}
                           indent={indent + 1}
                           isRunning={isRunning}
+                          hideMessageSteps={hideMessageSteps}
                         />
                       ) : null}
                       {shouldRenderOutput ? (
@@ -190,7 +204,7 @@ const Message = memo(
           </div>
         </div>
         {/* Make sure the child assistant messages of a step are displayed at the root level. */}
-        {message.steps && isStep ? (
+        {message.steps && isStep && !hideMessageSteps ? (
           <Messages
             messages={message.steps.filter((s) => s.type.includes('message'))}
             elements={elements}
@@ -200,14 +214,41 @@ const Message = memo(
             scorableRun={scorableRun}
           />
         ) : null}
-        {/* Display the child steps if the message is not a step (usually a user message). */}
-        {message.steps && !isStep ? (
+        {/* A user message owns its callback run, which decides response/trace order. */}
+        {message.steps && isUserMessage ? (
           <Messages
             messages={message.steps}
             elements={elements}
             actions={actions}
             indent={indent}
             isRunning={isRunning}
+            scorableRun={scorableRun}
+            hideMessageSteps={hideMessageSteps}
+          />
+        ) : null}
+        {/* Older threads attach tool calls directly to the assistant message. */}
+        {message.steps && !isStep && !isUserMessage && traceSteps?.length ? (
+          <ThinkingSteps count={traceSteps.length}>
+            <Messages
+              messages={traceSteps}
+              elements={elements}
+              actions={actions}
+              indent={indent}
+              isRunning={isRunning}
+              scorableRun={scorableRun}
+              hideMessageSteps
+            />
+          </ThinkingSteps>
+        ) : null}
+        {message.steps && !isStep && !isUserMessage && childMessages?.length ? (
+          <Messages
+            messages={childMessages}
+            elements={elements}
+            actions={actions}
+            indent={indent}
+            isRunning={isRunning}
+            scorableRun={scorableRun}
+            hideMessageSteps={hideMessageSteps}
           />
         ) : null}
       </>
