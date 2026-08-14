@@ -53,8 +53,13 @@ type DashboardSnapshot = {
   caveats: string[];
 };
 
+type AthleteRoster = {
+  defaultAthleteId: string;
+  athletes: Array<{ id: string; label: string }>;
+};
+
 const apiOrigin = (
-  import.meta.env.VITE_CATENCE_API_ORIGIN || 'http://127.0.0.1:8787'
+  import.meta.env.VITE_CATENCE_API_ORIGIN || window.location.origin
 ).replace(/\/$/, '');
 
 function displayNumber(value: number | null, digits = 0): string {
@@ -82,12 +87,52 @@ const chartLayout: Partial<Layout> = {
 function DashboardContent() {
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [roster, setRoster] = useState<AthleteRoster | null>(null);
+  const [rosterLoaded, setRosterLoaded] = useState(false);
+  const [athleteId, setAthleteId] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
       try {
-        const response = await fetch(`${apiOrigin}/api/v1/dashboard?days=28`, {
+        const response = await fetch(`${apiOrigin}/api/v1/athletes`, {
+          signal: controller.signal
+        });
+        // Older standalone Catence servers have no roster endpoint. Preserve
+        // VITE_CATENCE_API_ORIGIN deployments by using their legacy dashboard.
+        if (response.status === 404) return;
+        if (!response.ok)
+          throw new Error(
+            `Catence athlete roster request failed (${response.status}).`
+          );
+        const nextRoster = (await response.json()) as AthleteRoster;
+        if (
+          !nextRoster.athletes.some(
+            (athlete) => athlete.id === nextRoster.defaultAthleteId
+          )
+        )
+          throw new Error('Catence returned an invalid athlete roster.');
+        setRoster(nextRoster);
+        setAthleteId(nextRoster.defaultAthleteId);
+      } catch (caught) {
+        if ((caught as DOMException).name !== 'AbortError')
+          setError(caught instanceof Error ? caught.message : String(caught));
+      } finally {
+        setRosterLoaded(true);
+      }
+    })();
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!rosterLoaded || (roster && !athleteId)) return;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        setError(null);
+        const query = new URLSearchParams({ days: '28' });
+        if (athleteId) query.set('athleteId', athleteId);
+        const response = await fetch(`${apiOrigin}/api/v1/dashboard?${query}`, {
           signal: controller.signal
         });
         if (!response.ok)
@@ -101,7 +146,7 @@ function DashboardContent() {
       }
     })();
     return () => controller.abort();
-  }, []);
+  }, [athleteId, roster, rosterLoaded]);
 
   const latestHealth = snapshot?.health.at(-1) ?? null;
   const healthData = useMemo<Data[]>(() => {
@@ -191,6 +236,25 @@ function DashboardContent() {
           {snapshot.period.startDate} to {snapshot.period.endDate} · generated{' '}
           {new Date(snapshot.generatedAt).toLocaleString()}
         </p>
+        {roster && athleteId ? (
+          <label className="mt-3 flex w-fit items-center gap-2 text-sm text-muted-foreground">
+            Athlete
+            <select
+              className="rounded-md border bg-background px-2 py-1 text-foreground"
+              value={athleteId}
+              onChange={(event) => {
+                setSnapshot(null);
+                setAthleteId(event.target.value);
+              }}
+            >
+              {roster.athletes.map((athlete) => (
+                <option key={athlete.id} value={athlete.id}>
+                  {athlete.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
