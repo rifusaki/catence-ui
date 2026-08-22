@@ -83,6 +83,19 @@ class Select(InputWidget):
     initial_value: Optional[str] = None
     values: List[str] = Field(default_factory=list)
     items: Dict[str, str] = Field(default_factory=dict)
+    dynamic_options: Optional[Dict[str, Any]] = None
+    """Swap this select's options based on another widget's live value.
+
+    A mapping with two keys:
+
+    - ``watchId``: id of the sibling widget whose value selects a case
+    - ``cases``: watched value → ``{"items": {...}, "initialValue": ...,
+      "disabled": bool, "resetValue": ...}`` (all case fields optional)
+
+    The frontend resolves the active case on every keystroke of the watched
+    widget, without a save/reopen round-trip. Older frontends ignore the
+    field and keep using the static ``items``.
+    """
 
     def __post_init__(
         self,
@@ -112,8 +125,44 @@ class Select(InputWidget):
                 else self.initial_value
             )
 
+        if self.dynamic_options is not None:
+            if not isinstance(self.dynamic_options, dict):
+                raise ValueError("dynamic_options must be a dict")
+            watch_id = self.dynamic_options.get("watchId")
+            cases = self.dynamic_options.get("cases")
+            if not isinstance(watch_id, str) or not watch_id:
+                raise ValueError("dynamic_options requires a non-empty 'watchId'")
+            if not isinstance(cases, dict) or not cases:
+                raise ValueError("dynamic_options requires a non-empty 'cases' dict")
+            for watched_value, case in cases.items():
+                if not isinstance(case, dict):
+                    raise ValueError(
+                        f"dynamic_options case {watched_value!r} must be a dict"
+                    )
+                case_items = case.get("items")
+                if case_items is not None and not isinstance(case_items, dict):
+                    raise ValueError(
+                        f"dynamic_options case {watched_value!r} items must be a dict"
+                    )
+
+    def _dynamic_options_dict(self) -> Optional[Dict[str, Any]]:
+        if self.dynamic_options is None:
+            return None
+        cases: Dict[str, Any] = {}
+        for watched_value, case in self.dynamic_options["cases"].items():
+            serialized = dict(case)
+            if "items" in serialized:
+                # Same wire format as the top-level items array.
+                serialized["items"] = [
+                    {"label": label, "value": value}
+                    for label, value in (serialized["items"] or {}).items()
+                ]
+            cases[watched_value] = serialized
+        return {"watchId": self.dynamic_options["watchId"], "cases": cases}
+
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        dynamic_options = self._dynamic_options_dict()
+        result = {
             "type": self.type,
             "id": self.id,
             "label": self.label,
@@ -126,6 +175,9 @@ class Select(InputWidget):
             "disabled": self.disabled,
             "resetValue": self.reset_value,
         }
+        if dynamic_options is not None:
+            result["dynamicOptions"] = dynamic_options
+        return result
 
 
 @dataclass

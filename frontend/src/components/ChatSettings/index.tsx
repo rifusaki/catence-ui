@@ -26,6 +26,7 @@ import { Translator } from 'components/i18n';
 import { chatSettingsOpenState } from 'state/project';
 
 import { FormInput, TFormInputValue } from './FormInput';
+import { dependentSnapValue, resolveDynamicInput } from './dynamicOptions';
 import {
   configuredChatSettingsDefaults,
   useChatSettingsSnapshotAtOpen
@@ -91,6 +92,22 @@ export default function ChatSettingsModal() {
 
   const values = watch();
 
+  // Dependent selects (dynamicOptions) must track their watched widget's
+  // live value: snap a no-longer-valid choice to the active case's default
+  // as soon as the sibling changes, without waiting for a save.
+  useEffect(() => {
+    let snapped = false;
+    for (const input of chatSettingsInputs as Array<Record<string, any>>) {
+      if (!input || Array.isArray(input.inputs)) continue;
+      const target = dependentSnapValue(input, values);
+      if (target !== undefined && input.id) {
+        setValue(input.id, target);
+        snapped = true;
+      }
+    }
+    if (snapped) editChatSettings(getValues());
+  }, [values, chatSettingsInputs, setValue, getValues, editChatSettings]);
+
   const tabInputs = chatSettingsInputs.filter(
     (input: any) => Array.isArray(input?.inputs) && input.inputs.length > 0
   );
@@ -138,7 +155,7 @@ export default function ChatSettingsModal() {
                   <FormInput
                     key={input.id}
                     element={{
-                      ...input,
+                      ...resolveDynamicInput(input, values),
                       value: values[input.id],
                       onChange: handleChange,
                       setField: setFieldValue
@@ -154,7 +171,7 @@ export default function ChatSettingsModal() {
               <FormInput
                 key={input.id}
                 element={{
-                  ...input,
+                  ...resolveDynamicInput(input, values),
                   value: values[input.id],
                   onChange: handleChange,
                   setField: setFieldValue

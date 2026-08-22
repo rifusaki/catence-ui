@@ -237,6 +237,78 @@ class TestSelectWidget:
         assert len(result["items"]) == 2
         assert result["items"][0] == {"label": "gpt-4", "value": "gpt-4"}
         assert result["tooltip"] == "Select a model"
+        # The dynamic field is only present when configured.
+        assert "dynamicOptions" not in result
+
+    def test_select_dynamic_options_serialization(self):
+        """dynamicOptions converts case items to the wire format."""
+        select = Select(
+            id="effort",
+            label="Effort",
+            values=["default"],
+            dynamic_options={
+                "watchId": "model",
+                "cases": {
+                    "openai:gpt-5": {
+                        "items": {"Provider default": "default", "High": "high"},
+                        "initialValue": "default",
+                        "disabled": False,
+                    },
+                    "openai:o4-mini": {
+                        "items": {},
+                        "initialValue": "default",
+                        "disabled": True,
+                    },
+                },
+            },
+        )
+
+        result = select.to_dict()
+        options = result["dynamicOptions"]
+        assert options["watchId"] == "model"
+        gpt_case = options["cases"]["openai:gpt-5"]
+        assert gpt_case["items"] == [
+            {"label": "Provider default", "value": "default"},
+            {"label": "High", "value": "high"},
+        ]
+        assert gpt_case["initialValue"] == "default"
+        assert options["cases"]["openai:o4-mini"]["disabled"] is True
+        # Static fields remain untouched for older frontends.
+        assert result["items"] == [{"label": "default", "value": "default"}]
+
+    def test_select_dynamic_options_validation(self):
+        """Malformed dynamic_options are rejected at construction time."""
+        with pytest.raises(ValueError, match="watchId"):
+            Select(
+                id="s",
+                label="S",
+                values=["a"],
+                dynamic_options={"cases": {"x": {}}},
+            )
+        with pytest.raises(ValueError, match="cases"):
+            Select(
+                id="s",
+                label="S",
+                values=["a"],
+                dynamic_options={"watchId": "model", "cases": {}},
+            )
+        with pytest.raises(ValueError, match="must be a dict"):
+            Select(
+                id="s",
+                label="S",
+                values=["a"],
+                dynamic_options={"watchId": "model", "cases": {"x": ["bad"]}},
+            )
+        with pytest.raises(ValueError, match="items must be a dict"):
+            Select(
+                id="s",
+                label="S",
+                values=["a"],
+                dynamic_options={
+                    "watchId": "model",
+                    "cases": {"x": {"items": ["bad"]}},
+                },
+            )
 
 
 class TestTextInputWidget:
