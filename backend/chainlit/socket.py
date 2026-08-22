@@ -340,6 +340,10 @@ async def edit_message(sid, payload: MessagePayload):
         if message.id == payload["message"]["id"]:
             message.content = payload["message"]["output"]
             await message.update()
+            # Tool steps and other nested artifacts of the edited turn never
+            # enter chat_context, so they must be deleted explicitly or they
+            # would be duplicated by the regenerated answer.
+            await message.remove_children()
             orig_message = message
 
     await context.emitter.task_start()

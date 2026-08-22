@@ -628,3 +628,126 @@ class TestConnectionSuccessfulIdempotency:
             await connection_successful("sid-1")
 
         assert on_chat_start.call_count == 1
+
+
+class TestEditMessageCleansNestedSteps:
+    """Editing a user message must also delete nested tool steps.
+
+    Tool steps never enter chat_context, so the historical truncate-and-regen
+    edit flow left them orphaned: duplicated on every edit round and restored
+    from persistence on reload. See the Catence fork fix mirroring upstream
+    PR #2915.
+    """
+
+    @staticmethod
+    def _tracked_data_layer(thread):
+        events = []
+
+        async def get_thread(thread_id):
+            return thread
+
+        async def delete_step(step_id):
+            events.append(("delete_step", step_id))
+
+        async def update_step(step_dict):
+            events.append(("update_step", step_dict["id"]))
+
+        async def create_step(step_dict):
+            events.append(("create_step", step_dict["id"]))
+
+        layer = AsyncMock()
+        layer.thread_id = "test_thread_id"
+        layer.get_thread = AsyncMock(side_effect=get_thread)
+        layer.delete_step = AsyncMock(side_effect=delete_step)
+        layer.update_step = AsyncMock(side_effect=update_step)
+        layer.create_step = AsyncMock(side_effect=create_step)
+        return layer, events
+
+    @pytest.mark.asyncio
+    async def test_edit_deletes_tool_steps_of_edited_and_removed_turns(
+        self, mock_session_factory
+    ):
+        import asyncio
+        from contextlib import contextmanager
+
+        from chainlit.context import ChainlitContext, context_var
+        from chainlit.message import Message
+        from chainlit.socket import edit_message
+
+        session = mock_session_factory()
+
+        @contextmanager
+        def ws_context():
+            mock_loop = Mock(spec=asyncio.AbstractEventLoop)
+            emitter = AsyncMock()
+            with patch("asyncio.get_running_loop", return_value=mock_loop):
+                mock_context = ChainlitContext(session=session, emitter=emitter)
+                token = context_var.set(mock_context)
+                try:
+                    yield emitter
+                finally:
+                    context_var.reset(token)
+
+        # Persisted thread layout: two turns, each with a flat-in-DB tool step
+        # nested under its triggering user message.
+        thread = {
+            "steps": [
+                {"id": "u1", "parentId": None},
+                {"id": "tool_a", "parentId": "u1"},
+                {"id": "a1", "parentId": None},
+                {"id": "u2", "parentId": None},
+                {"id": "tool_b", "parentId": "u2"},
+                {"id": "a2", "parentId": None},
+            ],
+            "elements": [],
+        }
+        data_layer, events = self._tracked_data_layer(thread)
+
+        on_message = AsyncMock()
+        mock_config = Mock()
+        mock_config.code.on_message = on_message
+
+        with ws_context() as emitter:
+            u1 = Message(content="first question", type="user_message")
+            u1.id = "u1"
+            a1 = Message(content="first answer")
+            a1.id = "a1"
+            u2 = Message(content="second question", type="user_message")
+            u2.id = "u2"
+
+            socket_chat_context = Mock()
+            socket_chat_context.get.return_value = [u1, a1, u2]
+
+            with (
+                patch("chainlit.socket.WebsocketSession") as websocket_session,
+                patch(
+                    "chainlit.socket.init_ws_context",
+                    return_value=Mock(emitter=emitter),
+                ),
+                patch("chainlit.socket.chat_context", socket_chat_context),
+                patch("chainlit.socket.config", mock_config),
+                patch("chainlit.message.get_data_layer", return_value=data_layer),
+            ):
+                websocket_session.require.return_value = session
+                await edit_message(
+                    "sid-1",
+                    {"message": {"id": "u1", "output": "edited question"}},
+                )
+
+            # Flush the fire-and-forget persistence tasks scheduled by
+            # Message.remove()/update().
+            for _ in range(3):
+                await asyncio.sleep(0)
+
+        edited_content = on_message.await_args.args[0].content
+        assert edited_content == "edited question"
+
+        deleted_ids = [event[1] for event in events if event[0] == "delete_step"]
+        # Nested artifacts of both the edited turn and the removed turns are
+        # gone; nothing else is touched.
+        assert sorted(deleted_ids) == ["a1", "tool_a", "tool_b", "u2"]
+
+        emitted_deletes = [
+            call.args[0]["id"] for call in emitter.delete_step.await_args_list
+        ]
+        assert sorted(emitted_deletes) == ["a1", "tool_a", "tool_b", "u2"]
