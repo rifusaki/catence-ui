@@ -1,8 +1,16 @@
 import type { Data, Layout } from 'plotly.js';
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState
+} from 'react';
 
 import Page from 'pages/Page';
 
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -58,6 +66,22 @@ type AthleteRoster = {
   athletes: Array<{ id: string; label: string }>;
 };
 
+type SyncRun = {
+  runId: string;
+  provider: string;
+  stage: string;
+  percentComplete: number;
+};
+
+type SyncStatus = {
+  athleteId: string;
+  progress: { running: SyncRun[] };
+  lastSync: {
+    lastCompletedAt: string | null;
+    providers: Record<string, string>;
+  } | null;
+};
+
 const apiOrigin = (
   import.meta.env.VITE_CATENCE_API_ORIGIN || window.location.origin
 ).replace(/\/$/, '');
@@ -71,6 +95,107 @@ function displayDuration(seconds: number | null): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.round((seconds % 3600) / 60);
   return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
+}
+
+function displayTimestamp(value: string | null): string {
+  if (!value) return 'never';
+  const parsed = new Date(
+    value.endsWith('Z') || value.includes('+') ? value : `${value}Z`
+  );
+  return Number.isNaN(parsed.getTime()) ? 'never' : parsed.toLocaleString();
+}
+
+/**
+ * Detached sync trigger with live progress. The runtime spawns its own
+ * `catence-data sync` child, so leaving this page (or the browser) never
+ * interrupts a running backfill.
+ */
+function useSync(athleteId: string | null) {
+  const [status, setStatus] = useState<SyncStatus | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!athleteId) return;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch(
+          `${apiOrigin}/api/v1/sync/status?athleteId=${encodeURIComponent(athleteId)}`,
+          { signal: controller.signal }
+        );
+        if (!response.ok) return;
+        setStatus((await response.json()) as SyncStatus);
+      } catch {
+        // Status is best-effort; the dashboard itself stays usable.
+      }
+    })();
+    return () => controller.abort();
+  }, [athleteId]);
+
+  useEffect(() => {
+    const running = status?.progress.running.length ?? 0;
+    if (!athleteId || !running) return;
+    const timer = setInterval(() => {
+      void (async () => {
+        try {
+          const response = await fetch(
+            `${apiOrigin}/api/v1/sync/status?athleteId=${encodeURIComponent(athleteId)}`
+          );
+          if (response.ok) setStatus((await response.json()) as SyncStatus);
+        } catch {
+          // Keep polling; transient errors are not fatal.
+        }
+      })();
+    }, 3_000);
+    return () => clearInterval(timer);
+  }, [athleteId, status?.progress.running.length]);
+
+  const start = useCallback(async () => {
+    if (!athleteId) return;
+    setStarting(true);
+    setSyncError(null);
+    try {
+      const response = await fetch(`${apiOrigin}/api/v1/sync`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          athleteId,
+          provider: 'all',
+          refresh: false,
+          refreshModels: true
+        })
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(
+          result?.error?.message ?? `Sync failed to start (${response.status}).`
+        );
+      }
+      const poll = setInterval(() => {
+        void (async () => {
+          try {
+            const statusResponse = await fetch(
+              `${apiOrigin}/api/v1/sync/status?athleteId=${encodeURIComponent(athleteId)}`
+            );
+            if (statusResponse.ok)
+              setStatus((await statusResponse.json()) as SyncStatus);
+          } catch {
+            // Keep polling.
+          }
+        })();
+      }, 3_000);
+      // Stop the start-triggered poll once nothing runs; the idle watcher
+      // above takes over afterwards.
+      setTimeout(() => clearInterval(poll), 15 * 60_000);
+    } catch (caught) {
+      setSyncError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setStarting(false);
+    }
+  }, [athleteId]);
+
+  return { status, starting, syncError, start };
 }
 
 const chartLayout: Partial<Layout> = {
@@ -90,6 +215,7 @@ function DashboardContent() {
   const [roster, setRoster] = useState<AthleteRoster | null>(null);
   const [rosterLoaded, setRosterLoaded] = useState(false);
   const [athleteId, setAthleteId] = useState<string | null>(null);
+  const { status: syncStatus, starting, syncError, start } = useSync(athleteId);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -237,23 +363,52 @@ function DashboardContent() {
           {new Date(snapshot.generatedAt).toLocaleString()}
         </p>
         {roster && athleteId ? (
-          <label className="mt-3 flex w-fit items-center gap-2 text-sm text-muted-foreground">
-            Athlete
-            <select
-              className="rounded-md border bg-background px-2 py-1 text-foreground"
-              value={athleteId}
-              onChange={(event) => {
-                setSnapshot(null);
-                setAthleteId(event.target.value);
-              }}
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+            <label className="flex w-fit items-center gap-2">
+              Athlete
+              <select
+                className="rounded-md border bg-background px-2 py-1 text-foreground"
+                value={athleteId}
+                onChange={(event) => {
+                  setSnapshot(null);
+                  setAthleteId(event.target.value);
+                }}
+              >
+                {roster.athletes.map((athlete) => (
+                  <option key={athlete.id} value={athlete.id}>
+                    {athlete.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={
+                starting || (syncStatus?.progress.running.length ?? 0) > 0
+              }
+              onClick={() => void start()}
             >
-              {roster.athletes.map((athlete) => (
-                <option key={athlete.id} value={athlete.id}>
-                  {athlete.label}
-                </option>
-              ))}
-            </select>
-          </label>
+              Sync data
+            </Button>
+            {(syncStatus?.progress.running.length ?? 0) > 0 ? (
+              <span className="text-xs">
+                {syncStatus!.progress.running
+                  .map(
+                    (run) =>
+                      `${run.provider} ${run.percentComplete.toFixed(0)}% (${run.stage})`
+                  )
+                  .join(' · ')}
+              </span>
+            ) : (
+              <span className="text-xs">
+                Last sync:{' '}
+                {displayTimestamp(
+                  syncStatus?.lastSync?.lastCompletedAt ?? null
+                )}
+              </span>
+            )}
+          </div>
         ) : null}
       </div>
 
@@ -294,6 +449,12 @@ function DashboardContent() {
           </CardContent>
         </Card>
       </section>
+
+      {syncError ? (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {syncError}
+        </div>
+      ) : null}
 
       <section className="grid gap-6 xl:grid-cols-2">
         <Card>

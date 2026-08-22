@@ -1,3 +1,4 @@
+import { cn } from '@/lib/utils';
 import { memo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSetRecoilState } from 'recoil';
@@ -78,6 +79,19 @@ const Header = memo(() => {
           }
         >
           {location.pathname === '/dashboard' ? 'Chat' : 'Dashboard'}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn(
+            'ml-1 text-muted-foreground',
+            location.pathname === '/models' && 'bg-accent text-foreground'
+          )}
+          onClick={() =>
+            navigate(location.pathname === '/models' ? '/' : '/models')
+          }
+        >
+          {location.pathname === '/models' ? 'Chat' : 'Models'}
         </Button>
       </div>
 
