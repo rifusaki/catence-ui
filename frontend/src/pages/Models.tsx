@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 
 import Page from 'pages/Page';
 
@@ -60,6 +60,7 @@ function ModelsContent() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [editingKey, setEditingKey] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -107,6 +108,44 @@ function ModelsContent() {
     []
   );
 
+  const discover = useCallback(async () => {
+    setBusy(true);
+    setNotice(null);
+    setError(null);
+    try {
+      const response = await fetch(`${apiOrigin}/api/v1/models/discover`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}'
+      });
+      const result = (await response.json().catch(() => null)) as {
+        counts?: { chat: number; responses: number; messages: number };
+        guessedRoutes?: string[];
+        error?: { message?: string };
+      } | null;
+      if (!response.ok) {
+        throw new Error(
+          result?.error?.message ?? `Discovery failed (${response.status}).`
+        );
+      }
+      await load();
+      const counts = result?.counts;
+      setNotice(
+        `OpenCode Go discovery merged ${counts?.chat ?? 0} chat, ${
+          counts?.responses ?? 0
+        } responses, and ${counts?.messages ?? 0} messages models. Custom labels and thinking-effort variants were preserved.`
+      );
+      if (result?.guessedRoutes?.length)
+        setError(
+          `Prefix-guessed routes need verification: ${result.guessedRoutes.join(', ')}`
+        );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusy(false);
+    }
+  }, [load]);
+
   if (error && !payload) {
     return (
       <main className="flex flex-1 items-center justify-center p-8 text-sm text-destructive">
@@ -123,10 +162,10 @@ function ModelsContent() {
     );
   }
 
-  const updateDraft = (profileId: string, patch: Partial<Draft>) =>
+  const updateDraft = (key: string, patch: Partial<Draft>) =>
     setDrafts((old) => {
       const next: Record<string, Draft> = { ...old };
-      next[profileId] = { ...(old[profileId] ?? EMPTY_DRAFT), ...patch };
+      next[key] = { ...(old[key] ?? EMPTY_DRAFT), ...patch };
       return next;
     });
 
@@ -155,15 +194,70 @@ function ModelsContent() {
     }
   };
 
+  const startEdit = (profileId: string, model: ModelEntry) => {
+    const key = `${profileId}:${model.id}`;
+    setEditingKey(key);
+    setNotice(null);
+    setDrafts((old) => ({
+      ...old,
+      [key]: {
+        modelId: model.id,
+        label: model.label,
+        model: model.model,
+        reasoningEffort: model.reasoningEffort ?? '',
+        variants: model.variants === null ? '' : JSON.stringify(model.variants)
+      }
+    }));
+  };
+
+  const submitEdit = async (profileId: string, model: ModelEntry) => {
+    const key = `${profileId}:${model.id}`;
+    const draft = drafts[key];
+    if (!draft) return;
+    let variants: unknown;
+    if (draft.variants.trim()) {
+      try {
+        variants = JSON.parse(draft.variants);
+      } catch {
+        setError('Variants must be a JSON object mapping labels to values.');
+        return;
+      }
+    } else {
+      variants = null;
+    }
+    const ok = await post('update', {
+      profileId,
+      modelId: model.id,
+      label: draft.label.trim() || model.label,
+      model: draft.model.trim(),
+      reasoningEffort: draft.reasoningEffort.trim() || null,
+      variants
+    });
+    if (ok) {
+      setNotice(`Updated ${model.label} in ${profileId}.`);
+      setEditingKey(null);
+    }
+  };
+
   return (
     <main className="flex flex-1 flex-col gap-6 overflow-auto p-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Models</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          Enable, disable, and extend the deployments offered in the chat
-          settings. Credentials are never stored here — profiles only reference
-          environment-variable names.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Models</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Enable, disable, edit, and extend the deployments offered in the
+            chat settings. Credentials are never stored here — profiles only
+            reference environment-variable names.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busy}
+          onClick={() => void discover()}
+        >
+          Discover OpenCode Go models
+        </Button>
       </div>
 
       {error ? (
@@ -210,82 +304,203 @@ function ModelsContent() {
                 </thead>
                 <tbody>
                   {profile.models.map((model) => (
-                    <tr key={model.id} className="border-t align-middle">
-                      <td className="py-3 pr-4">
-                        <Switch
-                          checked={!model.disabled}
-                          disabled={busy}
-                          aria-label={`Toggle ${model.label}`}
-                          onClick={() =>
-                            post('toggle', {
-                              profileId: profile.id,
-                              modelId: model.id,
-                              disabled: !model.disabled
-                            })
-                          }
-                        />
-                      </td>
-                      <td className="py-3 pr-4">
-                        <div className="font-medium">
-                          {model.label}
-                          {!model.disabled &&
-                          profile.defaultModel === model.id ? (
-                            <span className="ml-2 text-xs text-muted-foreground">
-                              default
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {model.id}
-                        </div>
-                      </td>
-                      <td className="py-3 pr-4 font-mono text-xs">
-                        {model.model}
-                      </td>
-                      <td className="py-3 pr-4 text-xs text-muted-foreground">
-                        {model.variants === null
-                          ? 'Standard levels'
-                          : Object.keys(model.variants).length
-                            ? Object.entries(model.variants)
-                                .map(([label, value]) => `${label}→${value}`)
-                                .join(', ')
-                            : 'Disabled for this model'}
-                      </td>
-                      <td className="py-3 text-right">
-                        <div className="inline-flex justify-end gap-2">
-                          {!model.disabled &&
-                          profile.defaultModel !== model.id ? (
+                    <Fragment key={`${profile.id}:${model.id}`}>
+                      <tr className="border-t align-middle">
+                        <td className="py-3 pr-4">
+                          <Switch
+                            checked={!model.disabled}
+                            disabled={busy}
+                            aria-label={`Toggle ${model.label}`}
+                            onClick={() =>
+                              post('toggle', {
+                                profileId: profile.id,
+                                modelId: model.id,
+                                disabled: !model.disabled
+                              })
+                            }
+                          />
+                        </td>
+                        <td className="py-3 pr-4">
+                          <div className="font-medium">
+                            {model.label}
+                            {!model.disabled &&
+                            profile.defaultModel === model.id ? (
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                default
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {model.id}
+                          </div>
+                        </td>
+                        <td className="py-3 pr-4 font-mono text-xs">
+                          {model.model}
+                        </td>
+                        <td className="py-3 pr-4 text-xs text-muted-foreground">
+                          {model.variants === null
+                            ? 'Standard levels'
+                            : Object.keys(model.variants).length
+                              ? Object.entries(model.variants)
+                                  .map(([label, value]) => `${label}→${value}`)
+                                  .join(', ')
+                              : 'Disabled for this model'}
+                        </td>
+                        <td className="py-3 text-right">
+                          <div className="inline-flex justify-end gap-2">
+                            {!model.disabled &&
+                            profile.defaultModel !== model.id ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={busy}
+                                onClick={() =>
+                                  post('default', {
+                                    profileId: profile.id,
+                                    modelId: model.id
+                                  })
+                                }
+                              >
+                                Make default
+                              </Button>
+                            ) : null}
                             <Button
                               size="sm"
                               variant="ghost"
                               disabled={busy}
+                              onClick={() => startEdit(profile.id, model)}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive"
+                              disabled={busy}
                               onClick={() =>
-                                post('default', {
+                                post('remove', {
                                   profileId: profile.id,
                                   modelId: model.id
                                 })
                               }
                             >
-                              Make default
+                              Remove
                             </Button>
-                          ) : null}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive"
-                            disabled={busy}
-                            onClick={() =>
-                              post('remove', {
-                                profileId: profile.id,
-                                modelId: model.id
-                              })
-                            }
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
+                          </div>
+                        </td>
+                      </tr>
+                      {editingKey === `${profile.id}:${model.id}` ? (
+                        <tr>
+                          <td colSpan={5} className="border-t bg-muted/30 p-4">
+                            <div className="grid gap-3 md:grid-cols-2">
+                              <div className="grid gap-1.5">
+                                <Label
+                                  htmlFor={`${profile.id}-${model.id}-edit-label`}
+                                >
+                                  Display label
+                                </Label>
+                                <Input
+                                  id={`${profile.id}-${model.id}-edit-label`}
+                                  value={
+                                    drafts[`${profile.id}:${model.id}`]
+                                      ?.label ?? ''
+                                  }
+                                  onChange={(event) =>
+                                    updateDraft(`${profile.id}:${model.id}`, {
+                                      label: event.target.value
+                                    })
+                                  }
+                                />
+                              </div>
+                              <div className="grid gap-1.5">
+                                <Label
+                                  htmlFor={`${profile.id}-${model.id}-edit-model`}
+                                >
+                                  LiteLLM deployment reference
+                                </Label>
+                                <Input
+                                  id={`${profile.id}-${model.id}-edit-model`}
+                                  value={
+                                    drafts[`${profile.id}:${model.id}`]
+                                      ?.model ?? ''
+                                  }
+                                  onChange={(event) =>
+                                    updateDraft(`${profile.id}:${model.id}`, {
+                                      model: event.target.value
+                                    })
+                                  }
+                                />
+                              </div>
+                              <div className="grid gap-1.5">
+                                <Label
+                                  htmlFor={`${profile.id}-${model.id}-edit-effort`}
+                                >
+                                  Fixed reasoning effort (empty = none)
+                                </Label>
+                                <Input
+                                  id={`${profile.id}-${model.id}-edit-effort`}
+                                  placeholder="medium"
+                                  value={
+                                    drafts[`${profile.id}:${model.id}`]
+                                      ?.reasoningEffort ?? ''
+                                  }
+                                  onChange={(event) =>
+                                    updateDraft(`${profile.id}:${model.id}`, {
+                                      reasoningEffort: event.target.value
+                                    })
+                                  }
+                                />
+                              </div>
+                              <div className="grid gap-1.5">
+                                <Label
+                                  htmlFor={`${profile.id}-${model.id}-edit-variants`}
+                                >
+                                  Reasoning variants JSON (empty = standard
+                                  levels)
+                                </Label>
+                                <Textarea
+                                  id={`${profile.id}-${model.id}-edit-variants`}
+                                  placeholder='{"Default": "default", "High": "high"}'
+                                  value={
+                                    drafts[`${profile.id}:${model.id}`]
+                                      ?.variants ?? ''
+                                  }
+                                  onChange={(event) =>
+                                    updateDraft(`${profile.id}:${model.id}`, {
+                                      variants: event.target.value
+                                    })
+                                  }
+                                />
+                              </div>
+                              <div className="flex items-center gap-2 md:col-span-2">
+                                <Button
+                                  size="sm"
+                                  disabled={
+                                    busy ||
+                                    !drafts[
+                                      `${profile.id}:${model.id}`
+                                    ]?.model.trim()
+                                  }
+                                  onClick={() =>
+                                    void submitEdit(profile.id, model)
+                                  }
+                                >
+                                  Save changes
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={busy}
+                                  onClick={() => setEditingKey(null)}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -379,8 +594,10 @@ function ModelsContent() {
       ))}
       <p className="pb-4 text-xs text-muted-foreground">
         Disabled choices are remembered per machine in the Console database and
-        never written into config.json. Removing a model edits config.json and
-        keeps every other section untouched.
+        never written into config.json. Editing a model writes config.json
+        atomically and keeps every other section untouched. Rediscovering
+        OpenCode Go models refreshes their routing references but preserves your
+        custom labels and thinking-effort variants.
       </p>
     </main>
   );

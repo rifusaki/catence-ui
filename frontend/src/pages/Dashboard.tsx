@@ -172,6 +172,9 @@ function useSync(athleteId: string | null) {
           result?.error?.message ?? `Sync failed to start (${response.status}).`
         );
       }
+      // Discovery runs before the sync child spawns and never blocks it; its
+      // failure is only reported as a warning on the accepted response.
+      if (result?.warning) setSyncError(String(result.warning));
       const poll = setInterval(() => {
         void (async () => {
           try {
