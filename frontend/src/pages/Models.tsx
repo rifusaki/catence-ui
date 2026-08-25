@@ -26,6 +26,7 @@ type Profile = {
   defaultModel: string;
   requiredEnvironment: string[];
   missingEnvironment: string[];
+  hidden: boolean;
   models: ModelEntry[];
 };
 
@@ -121,6 +122,7 @@ function ModelsContent() {
       const result = (await response.json().catch(() => null)) as {
         counts?: { chat: number; responses: number; messages: number };
         guessedRoutes?: string[];
+        prunedModelIds?: string[];
         error?: { message?: string };
       } | null;
       if (!response.ok) {
@@ -130,10 +132,13 @@ function ModelsContent() {
       }
       await load();
       const counts = result?.counts;
+      const pruned = result?.prunedModelIds?.length ?? 0;
       setNotice(
         `OpenCode Go discovery merged ${counts?.chat ?? 0} chat, ${
           counts?.responses ?? 0
-        } responses, and ${counts?.messages ?? 0} messages models. Custom labels and thinking-effort variants were preserved.`
+        } responses, and ${counts?.messages ?? 0} messages models. Custom labels and thinking-effort variants were preserved${
+          pruned ? `, and ${pruned} unavailable model${pruned === 1 ? ' was' : 's were'} removed` : ''
+        }.`
       );
       if (result?.guessedRoutes?.length)
         setError(
@@ -239,6 +244,11 @@ function ModelsContent() {
     }
   };
 
+  const visibleProfiles = payload.profiles.filter(
+    (profile) => !profile.hidden
+  );
+  const hiddenProfiles = payload.profiles.filter((profile) => profile.hidden);
+
   return (
     <main className="flex flex-1 flex-col gap-6 overflow-auto p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -271,7 +281,7 @@ function ModelsContent() {
         </div>
       ) : null}
 
-      {payload.profiles.map((profile) => (
+      {visibleProfiles.map((profile) => (
         <Card key={profile.id}>
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-base">{profile.label}</CardTitle>
@@ -288,6 +298,19 @@ function ModelsContent() {
                   Ready
                 </Badge>
               )}
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                title="Hide this profile on this device. It stays configured; unhide it from the bottom of this page."
+                onClick={() =>
+                  void post('hide', { profileId: profile.id, hidden: true }).then(
+                    (ok) => ok && setNotice(`Hidden ${profile.label}.`)
+                  )
+                }
+              >
+                Hide
+              </Button>
             </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -592,12 +615,39 @@ function ModelsContent() {
           </CardContent>
         </Card>
       ))}
+      {hiddenProfiles.length ? (
+        <div className="rounded-md border border-dashed p-4">
+          <h2 className="text-sm font-medium text-muted-foreground">
+            Hidden profiles
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Hidden on this device only — still configured, and absent from the
+            chat Model dropdown.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {hiddenProfiles.map((profile) => (
+              <Button
+                key={profile.id}
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() =>
+                  void post('hide', { profileId: profile.id, hidden: false })
+                }
+              >
+                Unhide {profile.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <p className="pb-4 text-xs text-muted-foreground">
-        Disabled choices are remembered per machine in the Console database and
-        never written into config.json. Editing a model writes config.json
-        atomically and keeps every other section untouched. Rediscovering
-        OpenCode Go models refreshes their routing references but preserves your
-        custom labels and thinking-effort variants.
+        Disabled choices and hidden profiles are remembered per machine in the
+        Console database and never written into config.json. Editing a model
+        writes config.json atomically and keeps every other section untouched.
+        Rediscovering OpenCode Go models refreshes their routing references,
+        preserves your custom labels and thinking-effort variants, and removes
+        models that have left the live catalog.
       </p>
     </main>
   );
