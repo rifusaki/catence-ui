@@ -135,19 +135,25 @@ function useSync(athleteId: string | null) {
 
   useEffect(() => {
     const running = status?.progress.running.length ?? 0;
-    if (!athleteId || !running) return;
-    const timer = setInterval(() => {
-      void (async () => {
-        try {
-          const response = await fetch(
-            `${apiOrigin}/api/v1/sync/status?athleteId=${encodeURIComponent(athleteId)}`
-          );
-          if (response.ok) setStatus((await response.json()) as SyncStatus);
-        } catch {
-          // Keep polling; transient errors are not fatal.
-        }
-      })();
-    }, 3_000);
+    if (!athleteId) return;
+    // Poll fast while a run is active; keep a slow idle poll so a sync
+    // started elsewhere (another tab, the runtime CLI, an MCP tool) still
+    // flips this page into "Syncing…" without user interaction.
+    const timer = setInterval(
+      () => {
+        void (async () => {
+          try {
+            const response = await fetch(
+              `${apiOrigin}/api/v1/sync/status?athleteId=${encodeURIComponent(athleteId)}`
+            );
+            if (response.ok) setStatus((await response.json()) as SyncStatus);
+          } catch {
+            // Transient errors are not fatal; the next tick retries.
+          }
+        })();
+      },
+      running ? 3_000 : 10_000
+    );
     return () => clearInterval(timer);
   }, [athleteId, status?.progress.running.length]);
 
@@ -175,22 +181,7 @@ function useSync(athleteId: string | null) {
       // Discovery runs before the sync child spawns and never blocks it; its
       // failure is only reported as a warning on the accepted response.
       if (result?.warning) setSyncError(String(result.warning));
-      const poll = setInterval(() => {
-        void (async () => {
-          try {
-            const statusResponse = await fetch(
-              `${apiOrigin}/api/v1/sync/status?athleteId=${encodeURIComponent(athleteId)}`
-            );
-            if (statusResponse.ok)
-              setStatus((await statusResponse.json()) as SyncStatus);
-          } catch {
-            // Keep polling.
-          }
-        })();
-      }, 3_000);
-      // Stop the start-triggered poll once nothing runs; the idle watcher
-      // above takes over afterwards.
-      setTimeout(() => clearInterval(poll), 15 * 60_000);
+      // The polling effects above pick the run up within seconds.
     } catch (caught) {
       setSyncError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -388,18 +379,27 @@ function DashboardContent() {
               size="sm"
               variant="outline"
               disabled={
-                starting || (syncStatus?.progress.running.length ?? 0) > 0
+                starting ||
+                !athleteId ||
+                (syncStatus?.progress.running.length ?? 0) > 0
+              }
+              title={
+                !athleteId
+                  ? 'Athlete roster unavailable — the dashboard cannot start a sync until it loads.'
+                  : undefined
               }
               onClick={() => void start()}
             >
-              Sync data
+              {(syncStatus?.progress.running.length ?? 0) > 0
+                ? 'Syncing…'
+                : 'Sync data'}
             </Button>
             {(syncStatus?.progress.running.length ?? 0) > 0 ? (
               <span className="text-xs">
                 {syncStatus!.progress.running
                   .map(
                     (run) =>
-                      `${run.provider} ${run.percentComplete.toFixed(0)}% (${run.stage})`
+                      `Syncing… ${run.provider} ${run.percentComplete.toFixed(0)}% (${run.stage})`
                   )
                   .join(' · ')}
               </span>
