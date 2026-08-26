@@ -84,9 +84,15 @@ export default function MessageComposer({
 
   const { user } = useAuth();
   const { sendMessage, replyMessage } = useChatInteract();
-  const { askUser, chatSettingsInputs, disabled: _disabled } = useChatData();
+  const {
+    askUser,
+    chatSettingsInputs,
+    disabled: _disabled,
+    loading
+  } = useChatData();
 
-  const disabled = _disabled || !!attachments.find((a) => !a.uploaded);
+  const disabled =
+    _disabled || loading || !!attachments.find((a) => !a.uploaded);
 
   const { config } = useConfig();
   const showSettingsInComposer =

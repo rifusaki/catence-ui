@@ -85,24 +85,34 @@ const MessagesContainer = ({ navigate }: Props) => {
     }
     let cancelled = false;
     const poll = async () => {
-      try {
-        const res = await fetch(
-          `${apiOrigin}/api/v1/threads/${encodeURIComponent(threadId)}/generation`
-        );
-        if (!res.ok) {
-          if (!cancelled) setGenStatus(null);
+      const candidates = [
+        `${apiOrigin}/api/v1/threads/${encodeURIComponent(threadId)}/generation`,
+        `http://127.0.0.1:8787/api/v1/threads/${encodeURIComponent(threadId)}/generation`,
+        `http://localhost:8787/api/v1/threads/${encodeURIComponent(threadId)}/generation`
+      ];
+      for (const url of candidates) {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) continue;
+          const text = await res.text();
+          if (
+            text.trim().startsWith('<!doctype') ||
+            text.trim().startsWith('<html')
+          )
+            continue;
+          const data = JSON.parse(text) as GenerationStatus;
+          if (cancelled) return;
+          if (wasRunningRef.current && data.running === false) {
+            recoverThread(threadId);
+          }
+          wasRunningRef.current = data.running;
+          if (!cancelled) setGenStatus(data);
           return;
+        } catch {
+          continue;
         }
-        const data = (await res.json()) as GenerationStatus;
-        if (cancelled) return;
-        if (wasRunningRef.current && data.running === false) {
-          recoverThread(threadId);
-        }
-        wasRunningRef.current = data.running;
-        if (!cancelled) setGenStatus(data);
-      } catch {
-        if (!cancelled) setGenStatus(null);
       }
+      if (!cancelled) setGenStatus(null);
     };
     // Always poll on mount / thread change so a refresh mid-generation
     // immediately discovers the active run and shows the "Thinking…" banner
