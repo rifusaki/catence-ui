@@ -33,19 +33,49 @@ function HealthCard() {
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
-      try {
-        const response = await fetch(`${apiOrigin}/api/v1/health`, {
-          signal: controller.signal
-        });
-        if (!response.ok)
-          throw new Error(`Health request failed (${response.status}).`);
-        setHealth((await response.json()) as HealthStatus);
-      } catch (caught) {
-        if ((caught as DOMException).name !== 'AbortError')
-          setError(caught instanceof Error ? caught.message : String(caught));
-      } finally {
-        setLoading(false);
+      const candidates = [
+        `${apiOrigin}/api/v1/health`,
+        `http://127.0.0.1:8787/api/v1/health`,
+        `http://127.0.0.1:8787/health`,
+        `${apiOrigin}/health`
+      ];
+      let lastError: unknown = null;
+      for (const url of candidates) {
+        try {
+          const response = await fetch(url, { signal: controller.signal });
+          if (!response.ok) {
+            lastError = new Error(
+              `Health request failed (${response.status}) at ${url}.`
+            );
+            continue;
+          }
+          const text = await response.text();
+          // The console serves the SPA HTML for unknown API routes (200 with <!doctype)
+          if (
+            text.trim().startsWith('<!doctype') ||
+            text.trim().startsWith('<html')
+          ) {
+            lastError = new Error(
+              `Health endpoint not available at ${url} (returned HTML).`
+            );
+            continue;
+          }
+          const data = JSON.parse(text) as HealthStatus;
+          if (data && typeof data.status === 'string') {
+            setHealth(data);
+            setLoading(false);
+            return;
+          }
+          lastError = new Error(`Invalid health response from ${url}.`);
+        } catch (caught) {
+          if ((caught as DOMException).name === 'AbortError') return;
+          lastError = caught;
+        }
       }
+      setError(
+        lastError instanceof Error ? lastError.message : String(lastError)
+      );
+      setLoading(false);
     })();
     return () => controller.abort();
   }, []);
