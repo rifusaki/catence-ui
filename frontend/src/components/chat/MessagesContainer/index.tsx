@@ -84,7 +84,6 @@ const MessagesContainer = ({ navigate }: Props) => {
       return;
     }
     let cancelled = false;
-    let interval: ReturnType<typeof setInterval> | undefined;
     const poll = async () => {
       try {
         const res = await fetch(
@@ -105,15 +104,16 @@ const MessagesContainer = ({ navigate }: Props) => {
         if (!cancelled) setGenStatus(null);
       }
     };
-    if (loading || genStatus?.running) {
-      poll();
-      interval = setInterval(poll, 3000);
-    }
+    // Always poll on mount / thread change so a refresh mid-generation
+    // immediately discovers the active run and shows the "Thinking…" banner
+    // without waiting for the next user action.
+    poll();
+    const interval = setInterval(poll, 3000);
     return () => {
       cancelled = true;
-      if (interval) clearInterval(interval);
+      clearInterval(interval);
     };
-  }, [loading, threadId, genStatus?.running, apiOrigin, recoverThread]);
+  }, [threadId, apiOrigin, recoverThread]);
 
   const { t } = useTranslation();
 
