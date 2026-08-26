@@ -26,6 +26,7 @@ import { ErrorBoundary } from '../ErrorBoundary';
 import ChatFooter from './Footer';
 import MessagesContainer from './MessagesContainer';
 import ScrollContainer from './ScrollContainer';
+import ShowThinkingToggle from './ShowThinkingToggle';
 import WelcomeScreen from './WelcomeScreen';
 
 const Chat = () => {
@@ -234,6 +235,9 @@ const Chat = () => {
             maxWidth: layoutMaxWidth
           }}
         >
+          <div className="mb-2 flex w-full justify-end">
+            <ShowThinkingToggle />
+          </div>
           <ChatFooter
             fileSpec={fileSpec}
             onFileUpload={onFileUpload}

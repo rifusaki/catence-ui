@@ -21,9 +21,12 @@ import {
 
 import { useLayoutMaxWidth } from 'hooks/useLayoutMaxWidth';
 
+import { cotOverrideState } from '@/state/cot';
+
 import { ErrorBoundary } from './ErrorBoundary';
 import { Loader } from './Loader';
 import { Messages } from './chat/Messages';
+import ShowThinkingToggle from './chat/ShowThinkingToggle';
 
 type Props = {
   id: string;
@@ -54,6 +57,7 @@ const ReadOnlyThread = ({ id }: Props) => {
   const { t } = useTranslation();
   const layoutMaxWidth = useLayoutMaxWidth();
   const sessionId = useRecoilValue(sessionIdState);
+  const cotOverride = useRecoilValue(cotOverrideState);
 
   useEffect(() => {
     if (!thread) {
@@ -162,7 +166,7 @@ const ReadOnlyThread = ({ id }: Props) => {
       loading: false,
       showFeedbackButtons: !!config?.dataPersistence,
       uiName: config?.ui?.name || '',
-      cot: config?.ui?.cot || 'hidden',
+      cot: cotOverride ?? config?.ui?.cot ?? 'hidden',
       onElementRefClick,
       onError,
       onFeedbackUpdated,
@@ -171,6 +175,7 @@ const ReadOnlyThread = ({ id }: Props) => {
   }, [
     config?.ui?.name,
     config?.ui?.cot,
+    cotOverride,
     config?.features?.unsafe_allow_html,
     config?.features?.user_message_markdown,
     onElementRefClick,
@@ -193,6 +198,12 @@ const ReadOnlyThread = ({ id }: Props) => {
 
   return (
     <div className="flex w-full flex-col flex-grow relative overflow-y-auto">
+      <div
+        className="mx-auto flex w-full justify-end p-4 pb-0"
+        style={{ maxWidth: layoutMaxWidth }}
+      >
+        <ShowThinkingToggle />
+      </div>
       <ErrorBoundary>
         <MessageContext.Provider value={memoizedContext}>
           <div

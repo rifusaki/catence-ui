@@ -18,8 +18,11 @@ import {
   useConfig
 } from '@chainlit/react-client';
 
+import GenerationStatusBanner from '@/components/chat/GenerationStatusBanner';
 import { Messages } from '@/components/chat/Messages';
 import { useTranslation } from 'components/i18n/Translator';
+
+import { cotOverrideState } from '@/state/cot';
 
 interface Props {
   navigate?: (to: string) => void;
@@ -29,11 +32,12 @@ const MessagesContainer = ({ navigate }: Props) => {
   const apiClient = useContext(ChainlitContext);
   const { config } = useConfig();
   const { elements, askUser, loading, actions } = useChatData();
-  const { messages } = useChatMessages();
+  const { messages, threadId } = useChatMessages();
   const { uploadFile: _uploadFile } = useChatInteract();
   const setMessages = useSetRecoilState(messagesState);
   const setSideView = useSetRecoilState(sideViewState);
   const sessionId = useRecoilValue(sessionIdState);
+  const cotOverride = useRecoilValue(cotOverrideState);
 
   const { t } = useTranslation();
 
@@ -163,7 +167,7 @@ const MessagesContainer = ({ navigate }: Props) => {
       loading,
       showFeedbackButtons: enableFeedback,
       uiName: config?.ui?.name || '',
-      cot: config?.ui?.cot || 'hidden',
+      cot: cotOverride ?? config?.ui?.cot ?? 'hidden',
       onElementRefClick,
       onError,
       onFeedbackUpdated,
@@ -175,6 +179,7 @@ const MessagesContainer = ({ navigate }: Props) => {
     loading,
     config?.ui?.name,
     config?.ui?.cot,
+    cotOverride,
     config?.features?.unsafe_allow_html,
     config?.features?.user_message_markdown,
     onElementRefClick,
@@ -184,6 +189,7 @@ const MessagesContainer = ({ navigate }: Props) => {
 
   return (
     <MessageContext.Provider value={memoizedContext}>
+      <GenerationStatusBanner threadId={threadId} active={loading} />
       <Messages
         indent={0}
         isRunning={loading}
