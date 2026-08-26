@@ -1,5 +1,12 @@
 import { MessageContext } from '@/contexts/MessageContext';
-import { useCallback, useContext, useEffect, useMemo, useRef } from 'react';
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react';
 import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { toast } from 'sonner';
 
@@ -9,6 +16,7 @@ import {
   IMessageElement,
   IStep,
   messagesState,
+  nestMessages,
   sessionIdState,
   sideViewState,
   updateMessageById,
@@ -24,6 +32,8 @@ import { useTranslation } from 'components/i18n/Translator';
 
 import { cotOverrideState } from '@/state/cot';
 
+import { type GenerationStatus } from '@/types/generation';
+
 interface Props {
   navigate?: (to: string) => void;
 }
@@ -38,6 +48,72 @@ const MessagesContainer = ({ navigate }: Props) => {
   const setSideView = useSetRecoilState(sideViewState);
   const sessionId = useRecoilValue(sessionIdState);
   const cotOverride = useRecoilValue(cotOverrideState);
+
+  const apiOrigin = (
+    import.meta.env.VITE_CATENCE_API_ORIGIN || window.location.origin
+  ).replace(/\/$/, '');
+
+  // Poll the generation-status endpoint while a turn is active (including a turn
+  // that was detached from the socket), and reload the thread once it finishes
+  // so a refresh mid-generation still recovers the answer.
+  const [genStatus, setGenStatus] = useState<GenerationStatus | null>(null);
+  const wasRunningRef = useRef(false);
+
+  const recoverThread = useCallback(
+    async (id: string) => {
+      try {
+        const res = await fetch(
+          `${apiOrigin}/project/thread/${encodeURIComponent(id)}`
+        );
+        if (!res.ok) return;
+        const thread = (await res.json()) as { steps?: IStep[] };
+        if (thread?.steps?.length) {
+          setMessages(nestMessages(thread.steps));
+        }
+      } catch {
+        // Recovery is best-effort; the next render or reload will catch up.
+      }
+    },
+    [apiOrigin, setMessages]
+  );
+
+  useEffect(() => {
+    if (!threadId) {
+      setGenStatus(null);
+      wasRunningRef.current = false;
+      return;
+    }
+    let cancelled = false;
+    let interval: ReturnType<typeof setInterval> | undefined;
+    const poll = async () => {
+      try {
+        const res = await fetch(
+          `${apiOrigin}/api/v1/threads/${encodeURIComponent(threadId)}/generation`
+        );
+        if (!res.ok) {
+          if (!cancelled) setGenStatus(null);
+          return;
+        }
+        const data = (await res.json()) as GenerationStatus;
+        if (cancelled) return;
+        if (wasRunningRef.current && data.running === false) {
+          recoverThread(threadId);
+        }
+        wasRunningRef.current = data.running;
+        if (!cancelled) setGenStatus(data);
+      } catch {
+        if (!cancelled) setGenStatus(null);
+      }
+    };
+    if (loading || genStatus?.running) {
+      poll();
+      interval = setInterval(poll, 3000);
+    }
+    return () => {
+      cancelled = true;
+      if (interval) clearInterval(interval);
+    };
+  }, [loading, threadId, genStatus?.running, apiOrigin, recoverThread]);
 
   const { t } = useTranslation();
 
@@ -189,7 +265,7 @@ const MessagesContainer = ({ navigate }: Props) => {
 
   return (
     <MessageContext.Provider value={memoizedContext}>
-      <GenerationStatusBanner threadId={threadId} active={loading} />
+      <GenerationStatusBanner status={genStatus} />
       <Messages
         indent={0}
         isRunning={loading}
