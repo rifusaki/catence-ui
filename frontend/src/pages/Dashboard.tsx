@@ -1,18 +1,13 @@
 import type { Data, Layout } from 'plotly.js';
-import {
-  Suspense,
-  lazy,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState
-} from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import Page from 'pages/Page';
 
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+
+import { useSync } from '@/hooks/useSync';
 
 const Plot = lazy(() =>
   import('react-plotly.js').then((module) => ({ default: module.default }))
@@ -66,22 +61,6 @@ type AthleteRoster = {
   athletes: Array<{ id: string; label: string }>;
 };
 
-type SyncRun = {
-  runId: string;
-  provider: string;
-  stage: string;
-  percentComplete: number;
-};
-
-type SyncStatus = {
-  athleteId: string;
-  progress: { running: SyncRun[] };
-  lastSync: {
-    lastCompletedAt: string | null;
-    providers: Record<string, string>;
-  } | null;
-};
-
 const apiOrigin = (
   import.meta.env.VITE_CATENCE_API_ORIGIN || window.location.origin
 ).replace(/\/$/, '');
@@ -95,101 +74,6 @@ function displayDuration(seconds: number | null): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.round((seconds % 3600) / 60);
   return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
-}
-
-function displayTimestamp(value: string | null): string {
-  if (!value) return 'never';
-  const parsed = new Date(
-    value.endsWith('Z') || value.includes('+') ? value : `${value}Z`
-  );
-  return Number.isNaN(parsed.getTime()) ? 'never' : parsed.toLocaleString();
-}
-
-/**
- * Detached sync trigger with live progress. The runtime spawns its own
- * `catence-data sync` child, so leaving this page (or the browser) never
- * interrupts a running backfill.
- */
-function useSync(athleteId: string | null) {
-  const [status, setStatus] = useState<SyncStatus | null>(null);
-  const [starting, setStarting] = useState(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!athleteId) return;
-    const controller = new AbortController();
-    void (async () => {
-      try {
-        const response = await fetch(
-          `${apiOrigin}/api/v1/sync/status?athleteId=${encodeURIComponent(athleteId)}`,
-          { signal: controller.signal }
-        );
-        if (!response.ok) return;
-        setStatus((await response.json()) as SyncStatus);
-      } catch {
-        // Status is best-effort; the dashboard itself stays usable.
-      }
-    })();
-    return () => controller.abort();
-  }, [athleteId]);
-
-  useEffect(() => {
-    const running = status?.progress.running.length ?? 0;
-    if (!athleteId) return;
-    // Poll fast while a run is active; keep a slow idle poll so a sync
-    // started elsewhere (another tab, the runtime CLI, an MCP tool) still
-    // flips this page into "Syncing…" without user interaction.
-    const timer = setInterval(
-      () => {
-        void (async () => {
-          try {
-            const response = await fetch(
-              `${apiOrigin}/api/v1/sync/status?athleteId=${encodeURIComponent(athleteId)}`
-            );
-            if (response.ok) setStatus((await response.json()) as SyncStatus);
-          } catch {
-            // Transient errors are not fatal; the next tick retries.
-          }
-        })();
-      },
-      running ? 3_000 : 10_000
-    );
-    return () => clearInterval(timer);
-  }, [athleteId, status?.progress.running.length]);
-
-  const start = useCallback(async () => {
-    if (!athleteId) return;
-    setStarting(true);
-    setSyncError(null);
-    try {
-      const response = await fetch(`${apiOrigin}/api/v1/sync`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          athleteId,
-          provider: 'all',
-          refresh: false,
-          refreshModels: true
-        })
-      });
-      const result = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(
-          result?.error?.message ?? `Sync failed to start (${response.status}).`
-        );
-      }
-      // Discovery runs before the sync child spawns and never blocks it; its
-      // failure is only reported as a warning on the accepted response.
-      if (result?.warning) setSyncError(String(result.warning));
-      // The polling effects above pick the run up within seconds.
-    } catch (caught) {
-      setSyncError(caught instanceof Error ? caught.message : String(caught));
-    } finally {
-      setStarting(false);
-    }
-  }, [athleteId]);
-
-  return { status, starting, syncError, start };
 }
 
 const chartLayout: Partial<Layout> = {
@@ -206,10 +90,11 @@ const chartLayout: Partial<Layout> = {
 function DashboardContent() {
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isUnavailable, setIsUnavailable] = useState(false);
   const [roster, setRoster] = useState<AthleteRoster | null>(null);
   const [rosterLoaded, setRosterLoaded] = useState(false);
   const [athleteId, setAthleteId] = useState<string | null>(null);
-  const { status: syncStatus, starting, syncError, start } = useSync(athleteId);
+  const { status: syncStatus } = useSync(athleteId);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -250,16 +135,26 @@ function DashboardContent() {
     void (async () => {
       try {
         setError(null);
+        setIsUnavailable(false);
         const query = new URLSearchParams({ days: '28' });
         if (athleteId) query.set('athleteId', athleteId);
         const response = await fetch(`${apiOrigin}/api/v1/dashboard?${query}`, {
           signal: controller.signal
         });
-        if (!response.ok)
+        if (!response.ok) {
+          const body = await response.json().catch(() => null);
+          const code = body?.error?.code;
+          if (code === 'dashboard_unavailable') {
+            setIsUnavailable(true);
+            return;
+          }
           throw new Error(
-            `Catence dashboard request failed (${response.status}).`
+            body?.error?.message ??
+              `Catence dashboard request failed (${response.status}).`
           );
+        }
         setSnapshot((await response.json()) as DashboardSnapshot);
+        setIsUnavailable(false);
       } catch (caught) {
         if ((caught as DOMException).name !== 'AbortError')
           setError(caught instanceof Error ? caught.message : String(caught));
@@ -328,6 +223,28 @@ function DashboardContent() {
     );
   }
   if (!snapshot) {
+    if (isUnavailable) {
+      return (
+        <main className="flex flex-1 flex-col gap-6 overflow-auto p-6">
+          <div>
+            <h1 className="text-2xl font-semibold">Training dashboard</h1>
+            <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-100">
+              Data temporarily unavailable — a sync is running. View live
+              progress on the{' '}
+              <Link
+                to="/status"
+                className="font-medium underline hover:no-underline"
+              >
+                Status page
+              </Link>
+              .
+            </div>
+          </div>
+          <Skeleton className="h-12 w-56" />
+          <Skeleton className="h-64 w-full" />
+        </main>
+      );
+    }
     return (
       <main className="flex flex-1 flex-col gap-6 overflow-auto p-6">
         <Skeleton className="h-12 w-56" />
@@ -356,6 +273,28 @@ function DashboardContent() {
           {snapshot.period.startDate} to {snapshot.period.endDate} · generated{' '}
           {new Date(snapshot.generatedAt).toLocaleString()}
         </p>
+        <div className="mt-3 rounded-md border border-sky-200 bg-sky-50 px-4 py-2 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/20 dark:text-sky-100">
+          Sync moved to{' '}
+          <Link
+            to="/status"
+            className="font-medium underline hover:no-underline"
+          >
+            Status →
+          </Link>
+        </div>
+        {isUnavailable ? (
+          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-100">
+            Data temporarily unavailable — a sync is running. View live progress
+            on the{' '}
+            <Link
+              to="/status"
+              className="font-medium underline hover:no-underline"
+            >
+              Status page
+            </Link>
+            .
+          </div>
+        ) : null}
         {roster && athleteId ? (
           <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <label className="flex w-fit items-center gap-2">
@@ -375,42 +314,17 @@ function DashboardContent() {
                 ))}
               </select>
             </label>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={
-                starting ||
-                !athleteId ||
-                (syncStatus?.progress.running.length ?? 0) > 0
-              }
-              title={
-                !athleteId
-                  ? 'Athlete roster unavailable — the dashboard cannot start a sync until it loads.'
-                  : undefined
-              }
-              onClick={() => void start()}
-            >
-              {(syncStatus?.progress.running.length ?? 0) > 0
-                ? 'Syncing…'
-                : 'Sync data'}
-            </Button>
             {(syncStatus?.progress.running.length ?? 0) > 0 ? (
-              <span className="text-xs">
+              <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-medium text-sky-900 dark:bg-sky-900/30 dark:text-sky-100">
+                Syncing…{' '}
                 {syncStatus!.progress.running
                   .map(
                     (run) =>
-                      `Syncing… ${run.provider} ${run.percentComplete.toFixed(0)}% (${run.stage})`
+                      `${run.provider} ${run.percentComplete.toFixed(0)}% (${run.stage})`
                   )
                   .join(' · ')}
               </span>
-            ) : (
-              <span className="text-xs">
-                Last sync:{' '}
-                {displayTimestamp(
-                  syncStatus?.lastSync?.lastCompletedAt ?? null
-                )}
-              </span>
-            )}
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -452,12 +366,6 @@ function DashboardContent() {
           </CardContent>
         </Card>
       </section>
-
-      {syncError ? (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {syncError}
-        </div>
-      ) : null}
 
       <section className="grid gap-6 xl:grid-cols-2">
         <Card>

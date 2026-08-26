@@ -8,6 +8,7 @@ import Env from 'pages/Env';
 import Home from 'pages/Home';
 import Login from 'pages/Login';
 import Models from 'pages/Models';
+import Status from 'pages/Status';
 import Thread from 'pages/Thread';
 
 export const router = createBrowserRouter(
@@ -23,6 +24,10 @@ export const router = createBrowserRouter(
     {
       path: '/dashboard',
       element: <Dashboard />
+    },
+    {
+      path: '/status',
+      element: <Status />
     },
     {
       path: '/models',
