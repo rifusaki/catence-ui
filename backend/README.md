@@ -1,3 +1,5 @@
+> This fork is used by [catence](https://github.com/rifusaki/catence), so they are somewhat specific data fetching change. Nothing else.
+
 <h1 align="center">Welcome to Chainlit 👋</h1>
 
 <p align="center">
