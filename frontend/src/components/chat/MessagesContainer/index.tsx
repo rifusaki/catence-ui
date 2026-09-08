@@ -1,12 +1,5 @@
 import { MessageContext } from '@/contexts/MessageContext';
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState
-} from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef } from 'react';
 import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { toast } from 'sonner';
 
@@ -30,9 +23,9 @@ import GenerationStatusBanner from '@/components/chat/GenerationStatusBanner';
 import { Messages } from '@/components/chat/Messages';
 import { useTranslation } from 'components/i18n/Translator';
 
-import { cotOverrideState } from '@/state/cot';
+import { useGenerationStatusPoll } from '@/hooks/useGenerationStatus';
 
-import { type GenerationStatus } from '@/types/generation';
+import { cotOverrideState } from '@/state/cot';
 
 interface Props {
   navigate?: (to: string) => void;
@@ -53,10 +46,9 @@ const MessagesContainer = ({ navigate }: Props) => {
     import.meta.env.VITE_CATENCE_API_ORIGIN || window.location.origin
   ).replace(/\/$/, '');
 
-  // Poll the generation-status endpoint while a turn is active (including a turn
-  // that was detached from the socket), and reload the thread once it finishes
-  // so a refresh mid-generation still recovers the answer.
-  const [genStatus, setGenStatus] = useState<GenerationStatus | null>(null);
+  // Shared poller (writes generationStatusState): covers turns detached from
+  // the socket, and lets a refresh mid-generation recover the answer.
+  const genStatus = useGenerationStatusPoll();
   const wasRunningRef = useRef(false);
 
   const recoverThread = useCallback(
@@ -79,51 +71,16 @@ const MessagesContainer = ({ navigate }: Props) => {
 
   useEffect(() => {
     if (!threadId) {
-      setGenStatus(null);
       wasRunningRef.current = false;
       return;
     }
-    let cancelled = false;
-    const poll = async () => {
-      const candidates = [
-        `${apiOrigin}/api/v1/threads/${encodeURIComponent(threadId)}/generation`,
-        `http://127.0.0.1:8787/api/v1/threads/${encodeURIComponent(threadId)}/generation`,
-        `http://localhost:8787/api/v1/threads/${encodeURIComponent(threadId)}/generation`
-      ];
-      for (const url of candidates) {
-        try {
-          const res = await fetch(url);
-          if (!res.ok) continue;
-          const text = await res.text();
-          if (
-            text.trim().startsWith('<!doctype') ||
-            text.trim().startsWith('<html')
-          )
-            continue;
-          const data = JSON.parse(text) as GenerationStatus;
-          if (cancelled) return;
-          if (wasRunningRef.current && data.running === false) {
-            recoverThread(threadId);
-          }
-          wasRunningRef.current = data.running;
-          if (!cancelled) setGenStatus(data);
-          return;
-        } catch {
-          continue;
-        }
-      }
-      if (!cancelled) setGenStatus(null);
-    };
-    // Always poll on mount / thread change so a refresh mid-generation
-    // immediately discovers the active run and shows the "Thinking…" banner
-    // without waiting for the next user action.
-    poll();
-    const interval = setInterval(poll, 3000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [threadId, apiOrigin, recoverThread]);
+    // Reload the thread once a detached turn finishes so a refresh
+    // mid-generation still recovers the answer.
+    if (wasRunningRef.current && genStatus && genStatus.running === false) {
+      recoverThread(threadId);
+    }
+    wasRunningRef.current = genStatus?.running ?? false;
+  }, [threadId, genStatus, recoverThread]);
 
   const { t } = useTranslation();
 

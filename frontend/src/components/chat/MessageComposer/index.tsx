@@ -32,6 +32,7 @@ import { useTranslation } from 'components/i18n/Translator';
 
 import { useQuery } from '@/hooks/query';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useGenerationStatus } from '@/hooks/useGenerationStatus';
 
 import { chatSettingsOpenState } from '@/state/project';
 import {
@@ -90,9 +91,17 @@ export default function MessageComposer({
     disabled: _disabled,
     loading
   } = useChatData();
+  // Mirrors SubmitButton: socket `loading` ends when the detached turn is
+  // accepted, so the sidecar-backed status is the real "thinking" signal.
+  // Disabling the composer here prevents double-submits while keeping Stop
+  // (which ignores `disabled`) available.
+  const isGenerating = useGenerationStatus()?.running ?? false;
 
   const disabled =
-    _disabled || loading || !!attachments.find((a) => !a.uploaded);
+    _disabled ||
+    loading ||
+    isGenerating ||
+    !!attachments.find((a) => !a.uploaded);
 
   const { config } = useConfig();
   const showSettingsInComposer =
