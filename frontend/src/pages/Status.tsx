@@ -33,49 +33,47 @@ function HealthCard() {
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
-      const candidates = [
-        `${apiOrigin}/api/v1/health`,
-        `http://127.0.0.1:8787/api/v1/health`,
-        `http://127.0.0.1:8787/health`,
-        `${apiOrigin}/health`
-      ];
-      let lastError: unknown = null;
-      for (const url of candidates) {
-        try {
-          const response = await fetch(url, { signal: controller.signal });
-          if (!response.ok) {
-            lastError = new Error(
-              `Health request failed (${response.status}) at ${url}.`
-            );
-            continue;
-          }
-          const text = await response.text();
-          // The console serves the SPA HTML for unknown API routes (200 with <!doctype)
-          if (
-            text.trim().startsWith('<!doctype') ||
-            text.trim().startsWith('<html')
-          ) {
-            lastError = new Error(
-              `Health endpoint not available at ${url} (returned HTML).`
-            );
-            continue;
-          }
-          const data = JSON.parse(text) as HealthStatus;
-          if (data && typeof data.status === 'string') {
-            setHealth(data);
-            setLoading(false);
-            return;
-          }
-          lastError = new Error(`Invalid health response from ${url}.`);
-        } catch (caught) {
-          if ((caught as DOMException).name === 'AbortError') return;
-          lastError = caught;
+      // Same-origin only: the Console proxies this to the runtime behind
+      // login (app.py health_proxy). Never fall back to 127.0.0.1:8787
+      // (unreachable from a remote browser, e.g. Docker over a tunnel) or
+      // to /health (Chainlit's own {"status":"ok"} orchestration probe,
+      // which has no runtimeVersion/protocolVersion and renders as empty
+      // Runtime / bare "v").
+      const url = `${apiOrigin}/api/v1/health`;
+      try {
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error(
+            `Health request failed (${response.status}) at ${url}.`
+          );
         }
+        const text = await response.text();
+        // The console serves the SPA HTML for unknown API routes (200 with <!doctype)
+        if (
+          text.trim().startsWith('<!doctype') ||
+          text.trim().startsWith('<html')
+        ) {
+          throw new Error(
+            `Health endpoint not available at ${url} (returned HTML).`
+          );
+        }
+        const data = JSON.parse(text) as HealthStatus;
+        if (
+          !data ||
+          typeof data.status !== 'string' ||
+          typeof data.runtimeVersion !== 'string' ||
+          typeof data.protocolVersion !== 'number'
+        ) {
+          throw new Error(`Invalid health response from ${url}.`);
+        }
+        setHealth(data);
+        setLoading(false);
+        return;
+      } catch (caught) {
+        if ((caught as DOMException).name === 'AbortError') return;
+        setError(caught instanceof Error ? caught.message : String(caught));
+        setLoading(false);
       }
-      setError(
-        lastError instanceof Error ? lastError.message : String(lastError)
-      );
-      setLoading(false);
     })();
     return () => controller.abort();
   }, []);
