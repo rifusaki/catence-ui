@@ -137,7 +137,9 @@ function ModelsContent() {
         `OpenCode Go discovery merged ${counts?.chat ?? 0} chat, ${
           counts?.responses ?? 0
         } responses, and ${counts?.messages ?? 0} messages models. Custom labels and thinking-effort variants were preserved${
-          pruned ? `, and ${pruned} unavailable model${pruned === 1 ? ' was' : 's were'} removed` : ''
+          pruned
+            ? `, and ${pruned} unavailable model${pruned === 1 ? ' was' : 's were'} removed`
+            : ''
         }.`
       );
       if (result?.guessedRoutes?.length)
@@ -244,9 +246,7 @@ function ModelsContent() {
     }
   };
 
-  const visibleProfiles = payload.profiles.filter(
-    (profile) => !profile.hidden
-  );
+  const visibleProfiles = payload.profiles.filter((profile) => !profile.hidden);
   const hiddenProfiles = payload.profiles.filter((profile) => profile.hidden);
 
   return (
@@ -304,9 +304,10 @@ function ModelsContent() {
                 disabled={busy}
                 title="Hide this profile on this device. It stays configured; unhide it from the bottom of this page."
                 onClick={() =>
-                  void post('hide', { profileId: profile.id, hidden: true }).then(
-                    (ok) => ok && setNotice(`Hidden ${profile.label}.`)
-                  )
+                  void post('hide', {
+                    profileId: profile.id,
+                    hidden: true
+                  }).then((ok) => ok && setNotice(`Hidden ${profile.label}.`))
                 }
               >
                 Hide
