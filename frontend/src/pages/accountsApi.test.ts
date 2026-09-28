@@ -10,17 +10,25 @@ import {
   buildAddAccountPayload,
   buildUpdateAccountPayload,
   classifyAccountsFailure,
+  clearToolServerSecret,
   formatAthleteGrant,
   loadAccounts,
   loadAthleteOptions,
+  loadToolServers,
   loadWhoami,
   parseAccount,
   parseAccountsSnapshot,
   parseAthleteGrant,
   parseAthleteOptions,
+  parseToolServer,
+  parseToolServerSecret,
+  parseToolServersSnapshot,
   parseWhoami,
   removeAccount,
   resetAccountPassword,
+  saveToolServerSecret,
+  toolServerSecretUrl,
+  toolServersUrl,
   updateAccountGrants,
   whoamiUrl
 } from './accountsApi';
@@ -624,5 +632,244 @@ describe('account mutations', () => {
         }) as Response
     );
     expect(outcome).toEqual({ ok: true, data: null });
+  });
+});
+
+describe('tool server URL builders', () => {
+  it('targets the tool-servers collection', () => {
+    expect(toolServersUrl('https://catence.test')).toBe(
+      'https://catence.test/api/v1/tool-servers'
+    );
+  });
+
+  it('encodes the server name in the secret endpoint', () => {
+    expect(toolServerSecretUrl('https://catence.test', 'exa web')).toBe(
+      'https://catence.test/api/v1/tool-servers/exa%20web/secrets'
+    );
+  });
+});
+
+describe('parseToolServerSecret', () => {
+  it('accepts console and environment sources', () => {
+    expect(
+      parseToolServerSecret({
+        name: 'EXA_API_KEY',
+        configured: true,
+        source: 'console'
+      })
+    ).toEqual({ name: 'EXA_API_KEY', configured: true, source: 'console' });
+    expect(
+      parseToolServerSecret({
+        name: 'EXA_API_KEY',
+        configured: true,
+        source: 'environment'
+      })
+    ).toMatchObject({ source: 'environment' });
+  });
+
+  it('accepts an unconfigured secret', () => {
+    expect(
+      parseToolServerSecret({
+        name: 'EXA_API_KEY',
+        configured: false,
+        source: null
+      })
+    ).toEqual({ name: 'EXA_API_KEY', configured: false, source: null });
+  });
+
+  it('rejects malformed entries', () => {
+    expect(parseToolServerSecret(null)).toBeNull();
+    expect(
+      parseToolServerSecret({ name: '', configured: true, source: null })
+    ).toBeNull();
+    expect(
+      parseToolServerSecret({ name: 'X', configured: 'yes', source: null })
+    ).toBeNull();
+    expect(
+      parseToolServerSecret({ name: 'X', configured: true, source: 'stored' })
+    ).toBeNull();
+  });
+});
+
+describe('parseToolServer', () => {
+  it('falls back to the name when the label is missing', () => {
+    expect(
+      parseToolServer({
+        name: 'exa',
+        url: 'https://mcp.exa.ai/mcp',
+        secrets: []
+      })
+    ).toEqual({
+      name: 'exa',
+      label: 'exa',
+      url: 'https://mcp.exa.ai/mcp',
+      secrets: []
+    });
+  });
+
+  it('rejects malformed servers and secrets', () => {
+    expect(parseToolServer({ name: 'exa', url: '', secrets: [] })).toBeNull();
+    expect(
+      parseToolServer({ name: 'exa', url: 'https://x', secrets: [{}] })
+    ).toBeNull();
+  });
+});
+
+describe('parseToolServersSnapshot', () => {
+  it('requires a servers array', () => {
+    expect(parseToolServersSnapshot({ servers: [] })).toEqual({ servers: [] });
+    expect(parseToolServersSnapshot({})).toBeNull();
+    expect(parseToolServersSnapshot({ servers: [{}] })).toBeNull();
+  });
+});
+
+describe('loadToolServers', () => {
+  const toolServersPayload = {
+    servers: [
+      {
+        name: 'exa',
+        label: 'Exa Web Search',
+        url: 'https://mcp.exa.ai/mcp',
+        secrets: [{ name: 'EXA_API_KEY', configured: false, source: null }]
+      }
+    ]
+  };
+
+  it('loads the configured tool servers', async () => {
+    const outcome = await loadToolServers(
+      'https://catence.test',
+      async (url) => {
+        expect(url).toBe('https://catence.test/api/v1/tool-servers');
+        return jsonResponse(200, toolServersPayload);
+      }
+    );
+    expect(outcome).toEqual({ ok: true, data: toolServersPayload });
+  });
+
+  it('treats a 404 as an empty list', async () => {
+    const outcome = await loadToolServers('https://catence.test', async () =>
+      jsonResponse(404, {})
+    );
+    expect(outcome).toEqual({ ok: true, data: { servers: [] } });
+  });
+
+  it('maps a member rejection to admin_required', async () => {
+    const outcome = await loadToolServers('https://catence.test', async () =>
+      jsonResponse(403, { error: { code: 'admin_required' } })
+    );
+    expect(outcome).toMatchObject({
+      ok: false,
+      failure: { code: 'admin_required' }
+    });
+  });
+
+  it('reports network and malformed responses', async () => {
+    const failing: FetchImpl = async () => {
+      throw new TypeError('Failed to fetch');
+    };
+    expect(
+      await loadToolServers('https://catence.test', failing)
+    ).toMatchObject({ ok: false, failure: { code: 'network' } });
+    expect(
+      await loadToolServers('https://catence.test', async () =>
+        jsonResponse(200, { servers: 'nope' })
+      )
+    ).toMatchObject({ ok: false, failure: { code: 'invalid_response' } });
+  });
+});
+
+describe('tool server credentials', () => {
+  const storedSnapshot = {
+    servers: [
+      {
+        name: 'exa',
+        label: 'Exa Web Search',
+        url: 'https://mcp.exa.ai/mcp',
+        secrets: [{ name: 'EXA_API_KEY', configured: true, source: 'console' }]
+      }
+    ]
+  };
+
+  it('posts a stored credential and returns the refreshed snapshot', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const outcome = await saveToolServerSecret(
+      'https://catence.test',
+      'exa',
+      'EXA_API_KEY',
+      'secret-value',
+      async (url, init) => {
+        calls.push({ url, init });
+        return jsonResponse(200, storedSnapshot);
+      }
+    );
+    expect(calls[0].url).toBe(
+      'https://catence.test/api/v1/tool-servers/exa/secrets'
+    );
+    expect(calls[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      name: 'EXA_API_KEY',
+      value: 'secret-value'
+    });
+    expect(outcome).toEqual({ ok: true, data: storedSnapshot });
+  });
+
+  it('clears a credential with a null value', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const outcome = await clearToolServerSecret(
+      'https://catence.test',
+      'exa',
+      'EXA_API_KEY',
+      async (url, init) => {
+        expect(url).toBe(
+          'https://catence.test/api/v1/tool-servers/exa/secrets'
+        );
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return jsonResponse(200, { servers: [] });
+      }
+    );
+    expect(bodies[0]).toEqual({ name: 'EXA_API_KEY', value: null });
+    expect(outcome).toEqual({ ok: true, data: { servers: [] } });
+  });
+
+  it('maps store failures and network errors', async () => {
+    const outcome = await saveToolServerSecret(
+      'https://catence.test',
+      'exa',
+      'EXA_API_KEY',
+      'v',
+      async () =>
+        jsonResponse(500, { error: { code: 'tool_server_secrets_error' } })
+    );
+    expect(outcome).toMatchObject({
+      ok: false,
+      failure: { code: 'tool_server_secrets_error' }
+    });
+
+    const failing: FetchImpl = async () => {
+      throw new TypeError('Failed to fetch');
+    };
+    expect(
+      await clearToolServerSecret(
+        'https://catence.test',
+        'exa',
+        'EXA_API_KEY',
+        failing
+      )
+    ).toMatchObject({ ok: false, failure: { code: 'network' } });
+  });
+
+  it('maps a missing server to tool_server_not_found', async () => {
+    const outcome = await saveToolServerSecret(
+      'https://catence.test',
+      'ghost',
+      'EXA_API_KEY',
+      'v',
+      async () =>
+        jsonResponse(404, { error: { code: 'tool_server_not_found' } })
+    );
+    expect(outcome).toMatchObject({
+      ok: false,
+      failure: { code: 'tool_server_not_found' }
+    });
   });
 });

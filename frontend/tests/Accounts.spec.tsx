@@ -40,6 +40,28 @@ const accountsSnapshot = {
   breakGlass: { username: 'root' }
 };
 
+const toolServersSnapshot = {
+  servers: [
+    {
+      name: 'exa',
+      label: 'Exa Web Search',
+      url: 'https://mcp.exa.ai/mcp',
+      secrets: [{ name: 'EXA_API_KEY', configured: false, source: null }]
+    }
+  ]
+};
+
+const savedToolServersSnapshot = {
+  servers: [
+    {
+      name: 'exa',
+      label: 'Exa Web Search',
+      url: 'https://mcp.exa.ai/mcp',
+      secrets: [{ name: 'EXA_API_KEY', configured: true, source: 'console' }]
+    }
+  ]
+};
+
 function respond(status: number, body: unknown): Response {
   return {
     ok: status >= 200 && status < 300,
@@ -55,8 +77,10 @@ describe('Accounts page', () => {
   let addResponse: { status: number; body: unknown };
   let removeResponse: { status: number; body: unknown };
   let rosterResponse: { status: number; body: unknown };
+  let toolServersResponse: { status: number; body: unknown };
   let addedBodies: Array<Record<string, unknown>>;
   let removedBodies: Array<Record<string, unknown>>;
+  let secretBodies: Array<Record<string, unknown>>;
   const originalFetch = global.fetch;
 
   beforeEach(() => {
@@ -64,8 +88,10 @@ describe('Accounts page', () => {
     addResponse = { status: 200, body: {} };
     removeResponse = { status: 200, body: {} };
     rosterResponse = { status: 200, body: roster };
+    toolServersResponse = { status: 200, body: toolServersSnapshot };
     addedBodies = [];
     removedBodies = [];
+    secretBodies = [];
     fetchMock.mockReset();
     fetchMock.mockImplementation(async (input: unknown, init?: RequestInit) => {
       const url = String(input);
@@ -85,6 +111,14 @@ describe('Accounts page', () => {
         return respond(accountsResponse.status, accountsResponse.body);
       if (url.includes('/api/v1/athletes'))
         return respond(rosterResponse.status, rosterResponse.body);
+      if (url.includes('/api/v1/tool-servers/exa/secrets')) {
+        secretBodies.push(
+          JSON.parse(String(init?.body)) as Record<string, unknown>
+        );
+        return respond(200, savedToolServersSnapshot);
+      }
+      if (url.includes('/api/v1/tool-servers'))
+        return respond(toolServersResponse.status, toolServersResponse.body);
       return respond(404, {});
     });
     global.fetch = fetchMock as unknown as typeof fetch;
@@ -182,5 +216,37 @@ describe('Accounts page', () => {
     expect(await screen.findByText('ana')).toBeInTheDocument();
     expect(screen.getByText(/no athlete access yet/i)).toBeInTheDocument();
     expect(screen.queryByText(/invalid athlete roster/i)).toBeNull();
+  });
+
+  it('shows tool-server credential readiness and saves a value', async () => {
+    render(<Accounts />);
+    await screen.findByText('Exa Web Search');
+
+    expect(screen.getByText('exa')).toBeInTheDocument();
+    expect(screen.getByText('not set')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('EXA_API_KEY value'), {
+      target: { value: 'exa-secret-value' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(secretBodies).toHaveLength(1));
+    expect(secretBodies[0]).toEqual({
+      name: 'EXA_API_KEY',
+      value: 'exa-secret-value'
+    });
+    expect(await screen.findByText('saved here')).toBeInTheDocument();
+    expect(
+      screen.getByText('Saved EXA_API_KEY for Exa Web Search.')
+    ).toBeInTheDocument();
+  });
+
+  it('renders the empty tool-server state when none are configured', async () => {
+    toolServersResponse = { status: 200, body: { servers: [] } };
+    render(<Accounts />);
+
+    expect(
+      await screen.findByText(/no extra tool servers are configured/i)
+    ).toBeInTheDocument();
   });
 });

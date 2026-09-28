@@ -41,6 +41,8 @@ export type AccountsFailureCode =
   | 'account_exists'
   | 'account_not_found'
   | 'last_admin'
+  | 'tool_server_not_found'
+  | 'tool_server_secrets_error'
   | 'network'
   | 'server_error'
   | 'invalid_response';
@@ -66,6 +68,25 @@ export type AccountGrantsUpdate = {
   athletes: AthleteGrant;
 };
 
+export type ToolServerSecretSource = 'console' | 'environment';
+
+export type ToolServerSecret = {
+  name: string;
+  configured: boolean;
+  source: ToolServerSecretSource | null;
+};
+
+export type ToolServer = {
+  name: string;
+  label: string;
+  url: string;
+  secrets: ToolServerSecret[];
+};
+
+export type ToolServersSnapshot = {
+  servers: ToolServer[];
+};
+
 export type FetchImpl = (url: string, init?: RequestInit) => Promise<Response>;
 
 type ApiErrorBody = {
@@ -85,7 +106,10 @@ const FAILURE_MESSAGES: Record<
   last_admin:
     'That is the last admin — promote another admin before removing it.',
   network: 'Network error — could not reach the Catence server.',
-  invalid_response: 'The Catence server returned an invalid accounts response.'
+  invalid_response: 'The Catence server returned an invalid accounts response.',
+  tool_server_not_found: 'That tool server is not configured.',
+  tool_server_secrets_error:
+    'The Console tool-server credential store is unusable.'
 };
 
 const SERVER_FAILURE_CODES: readonly AccountsFailureCode[] = [
@@ -94,7 +118,9 @@ const SERVER_FAILURE_CODES: readonly AccountsFailureCode[] = [
   'invalid_request',
   'account_exists',
   'account_not_found',
-  'last_admin'
+  'last_admin',
+  'tool_server_not_found',
+  'tool_server_secrets_error'
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -118,6 +144,17 @@ export function accountsActionUrl(
 
 export function athletesUrl(apiOrigin: string): string {
   return `${apiOrigin}/api/v1/athletes`;
+}
+
+export function toolServersUrl(apiOrigin: string): string {
+  return `${apiOrigin}/api/v1/tool-servers`;
+}
+
+export function toolServerSecretUrl(
+  apiOrigin: string,
+  serverName: string
+): string {
+  return `${apiOrigin}/api/v1/tool-servers/${encodeURIComponent(serverName)}/secrets`;
 }
 
 /** Admins always have `'all'`, whatever the form collected. */
@@ -405,6 +442,148 @@ export function resetAccountPassword(
     apiOrigin,
     'passwd',
     { username: username.trim(), password },
+    fetchImpl
+  );
+}
+
+// Extra tool servers (console.mcpServers credentials)
+
+export function parseToolServerSecret(value: unknown): ToolServerSecret | null {
+  if (!isRecord(value)) return null;
+  const { name, configured, source } = value;
+  if (typeof name !== 'string' || !name) return null;
+  if (typeof configured !== 'boolean') return null;
+  if (source !== null && source !== 'console' && source !== 'environment') {
+    return null;
+  }
+  return { name, configured, source };
+}
+
+export function parseToolServer(value: unknown): ToolServer | null {
+  if (!isRecord(value)) return null;
+  const { name, label, url, secrets } = value;
+  if (typeof name !== 'string' || !name) return null;
+  if (typeof url !== 'string' || !url) return null;
+  if (!Array.isArray(secrets)) return null;
+  const parsedSecrets: ToolServerSecret[] = [];
+  for (const entry of secrets) {
+    const secret = parseToolServerSecret(entry);
+    if (!secret) return null;
+    parsedSecrets.push(secret);
+  }
+  return {
+    name,
+    label: typeof label === 'string' && label ? label : name,
+    url,
+    secrets: parsedSecrets
+  };
+}
+
+export function parseToolServersSnapshot(
+  value: unknown
+): ToolServersSnapshot | null {
+  if (!isRecord(value)) return null;
+  const { servers } = value;
+  if (!Array.isArray(servers)) return null;
+  const parsed: ToolServer[] = [];
+  for (const entry of servers) {
+    const server = parseToolServer(entry);
+    if (!server) return null;
+    parsed.push(server);
+  }
+  return { servers: parsed };
+}
+
+export async function loadToolServers(
+  apiOrigin: string,
+  fetchImpl: FetchImpl = fetch
+): Promise<AccountsOutcome<ToolServersSnapshot>> {
+  let response: Response;
+  try {
+    response = await fetchImpl(toolServersUrl(apiOrigin));
+  } catch {
+    return { ok: false, failure: accountsFailure('network') };
+  }
+  if (response.status === 404) {
+    // Standalone servers without the Console API expose no tool servers.
+    return { ok: true, data: { servers: [] } };
+  }
+  const body = (await response.json().catch(() => null)) as
+    | (ToolServersSnapshot & ApiErrorBody)
+    | null;
+  if (!response.ok) {
+    return {
+      ok: false,
+      failure: classifyAccountsFailure(response.status, body?.error)
+    };
+  }
+  const snapshot = parseToolServersSnapshot(body);
+  if (!snapshot) {
+    return { ok: false, failure: accountsFailure('invalid_response') };
+  }
+  return { ok: true, data: snapshot };
+}
+
+async function postToolServerSecret(
+  apiOrigin: string,
+  serverName: string,
+  secretName: string,
+  value: string | null,
+  fetchImpl: FetchImpl
+): Promise<AccountsOutcome<ToolServersSnapshot>> {
+  let response: Response;
+  try {
+    response = await fetchImpl(toolServerSecretUrl(apiOrigin, serverName), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: secretName, value })
+    });
+  } catch {
+    return { ok: false, failure: accountsFailure('network') };
+  }
+  const body = (await response.json().catch(() => null)) as
+    | (ToolServersSnapshot & ApiErrorBody)
+    | null;
+  if (!response.ok) {
+    return {
+      ok: false,
+      failure: classifyAccountsFailure(response.status, body?.error)
+    };
+  }
+  const snapshot = parseToolServersSnapshot(body);
+  if (!snapshot) {
+    return { ok: false, failure: accountsFailure('invalid_response') };
+  }
+  return { ok: true, data: snapshot };
+}
+
+export function saveToolServerSecret(
+  apiOrigin: string,
+  serverName: string,
+  secretName: string,
+  value: string,
+  fetchImpl: FetchImpl = fetch
+): Promise<AccountsOutcome<ToolServersSnapshot>> {
+  return postToolServerSecret(
+    apiOrigin,
+    serverName,
+    secretName,
+    value,
+    fetchImpl
+  );
+}
+
+export function clearToolServerSecret(
+  apiOrigin: string,
+  serverName: string,
+  secretName: string,
+  fetchImpl: FetchImpl = fetch
+): Promise<AccountsOutcome<ToolServersSnapshot>> {
+  return postToolServerSecret(
+    apiOrigin,
+    serverName,
+    secretName,
+    null,
     fetchImpl
   );
 }

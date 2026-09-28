@@ -34,12 +34,17 @@ import {
   type AccountsSnapshot,
   type AthleteGrant,
   type AthleteOption,
+  type ToolServer,
+  type ToolServerSecret,
   addAccount,
+  clearToolServerSecret,
   formatAthleteGrant,
   loadAccounts,
   loadAthleteOptions,
+  loadToolServers,
   removeAccount,
   resetAccountPassword,
+  saveToolServerSecret,
   updateAccountGrants
 } from './accountsApi';
 import { formatTimestamp, withSignal } from './profileFile';
@@ -172,6 +177,11 @@ function AccountsContent() {
   const [removing, setRemoving] = useState<Account | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
 
+  const [toolServers, setToolServers] = useState<ToolServer[] | null>(null);
+  const [toolServersError, setToolServersError] = useState<string | null>(null);
+  const [secretDrafts, setSecretDrafts] = useState<Record<string, string>>({});
+  const [secretBusy, setSecretBusy] = useState<string | null>(null);
+
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
@@ -195,6 +205,25 @@ function AccountsContent() {
         return;
       }
       setLoadError(outcome.failure.message);
+    })();
+    return () => controller.abort();
+  }, [reloadToken]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      const outcome = await loadToolServers(
+        apiOrigin,
+        withSignal(controller.signal)
+      );
+      if (controller.signal.aborted) return;
+      if (outcome.ok) {
+        setToolServers(outcome.data.servers);
+        setToolServersError(null);
+        return;
+      }
+      setToolServers([]);
+      setToolServersError(outcome.failure.message);
     })();
     return () => controller.abort();
   }, [reloadToken]);
@@ -249,6 +278,49 @@ function AccountsContent() {
     setAddOpen(false);
     setNotice(`Added ${username}.`);
     reload();
+  };
+
+  const submitSecret = async (server: ToolServer, secret: ToolServerSecret) => {
+    const key = `${server.name}:${secret.name}`;
+    const value = secretDrafts[key] ?? '';
+    if (!value || secretBusy) return;
+    setSecretBusy(key);
+    setNotice(null);
+    const outcome = await saveToolServerSecret(
+      apiOrigin,
+      server.name,
+      secret.name,
+      value
+    );
+    setSecretBusy(null);
+    if (!outcome.ok) {
+      setToolServersError(outcome.failure.message);
+      return;
+    }
+    setToolServers(outcome.data.servers);
+    setToolServersError(null);
+    setSecretDrafts((drafts) => ({ ...drafts, [key]: '' }));
+    setNotice(`Saved ${secret.name} for ${server.label}.`);
+  };
+
+  const clearSecret = async (server: ToolServer, secret: ToolServerSecret) => {
+    const key = `${server.name}:${secret.name}`;
+    if (secretBusy) return;
+    setSecretBusy(key);
+    setNotice(null);
+    const outcome = await clearToolServerSecret(
+      apiOrigin,
+      server.name,
+      secret.name
+    );
+    setSecretBusy(null);
+    if (!outcome.ok) {
+      setToolServersError(outcome.failure.message);
+      return;
+    }
+    setToolServers(outcome.data.servers);
+    setToolServersError(null);
+    setNotice(`Cleared ${secret.name} for ${server.label}.`);
   };
 
   const startEdit = (account: Account) => {
@@ -509,6 +581,109 @@ function AccountsContent() {
             <p className="text-sm text-muted-foreground">
               No Console accounts have been created yet.
             </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-base">Tool server credentials</CardTitle>
+          {toolServers !== null && (
+            <span className="text-sm text-muted-foreground">
+              {toolServers.length}
+            </span>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {toolServersError && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {toolServersError}
+            </div>
+          )}
+          {toolServers === null ? (
+            <Skeleton className="h-16 w-full" />
+          ) : toolServers.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No extra tool servers are configured. Add a{' '}
+              <code>console.mcpServers</code> entry in <code>config.json</code>{' '}
+              to attach one.
+            </p>
+          ) : (
+            toolServers.map((server) => (
+              <div
+                key={server.name}
+                className="space-y-3 rounded-md border px-3 py-3"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium">{server.label}</span>
+                  <Badge variant="outline">{server.name}</Badge>
+                </div>
+                <p className="break-all font-mono text-xs text-muted-foreground">
+                  {server.url}
+                </p>
+                {server.secrets.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    This server uses no credentials.
+                  </p>
+                ) : (
+                  server.secrets.map((secret) => {
+                    const key = `${server.name}:${secret.name}`;
+                    const busy = secretBusy === key;
+                    return (
+                      <div key={secret.name} className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <code className="font-mono text-xs">
+                            {secret.name}
+                          </code>
+                          {secret.source === 'console' ? (
+                            <Badge variant="secondary">saved here</Badge>
+                          ) : secret.source === 'environment' ? (
+                            <Badge variant="secondary">environment</Badge>
+                          ) : (
+                            <Badge variant="outline">not set</Badge>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Input
+                            type="password"
+                            aria-label={`${secret.name} value`}
+                            placeholder={
+                              secret.configured
+                                ? 'Replace value…'
+                                : 'Paste value…'
+                            }
+                            value={secretDrafts[key] ?? ''}
+                            onChange={(event) =>
+                              setSecretDrafts((drafts) => ({
+                                ...drafts,
+                                [key]: event.target.value
+                              }))
+                            }
+                            className="max-w-xs"
+                          />
+                          <Button
+                            size="sm"
+                            disabled={busy || !(secretDrafts[key] ?? '')}
+                            onClick={() => void submitSecret(server, secret)}
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            disabled={busy || secret.source !== 'console'}
+                            onClick={() => void clearSecret(server, secret)}
+                          >
+                            Clear
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            ))
           )}
         </CardContent>
       </Card>
