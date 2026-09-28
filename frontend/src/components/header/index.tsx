@@ -17,6 +17,8 @@ import {
 } from '@/components/ui/tooltip';
 import { Translator } from 'components/i18n';
 
+import { useWhoami } from '@/hooks/useWhoami';
+
 import { chatSettingsSidebarOpenState } from '@/state/project';
 
 import ApiKeys from './ApiKeys';
@@ -33,6 +35,7 @@ const Header = memo(() => {
   const navigate = useNavigate();
   const location = useLocation();
   const { config } = useConfig();
+  const whoami = useWhoami();
   const { chatSettingsInputs } = useChatData();
   const { open, openMobile, isMobile } = useSidebar();
   const setChatSettingsSidebarOpen = useSetRecoilState(
@@ -119,6 +122,21 @@ const Header = memo(() => {
         >
           {location.pathname === '/profile' ? 'Chat' : 'Profile'}
         </Button>
+        {whoami?.role === 'admin' ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              'ml-1 text-muted-foreground',
+              location.pathname === '/accounts' && 'bg-accent text-foreground'
+            )}
+            onClick={() =>
+              navigate(location.pathname === '/accounts' ? '/' : '/accounts')
+            }
+          >
+            {location.pathname === '/accounts' ? 'Chat' : 'Accounts'}
+          </Button>
+        ) : null}
       </div>
 
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">

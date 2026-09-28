@@ -13,6 +13,8 @@ import {
   SidebarRail
 } from '@/components/ui/sidebar';
 
+import { useWhoami } from '@/hooks/useWhoami';
+
 import NewChatButton from '../header/NewChat';
 import SearchChats from './Search';
 import { ThreadHistory } from './ThreadHistory';
@@ -22,6 +24,7 @@ export default function LeftSidebar({
 }: React.ComponentProps<typeof Sidebar>) {
   const navigate = useNavigate();
   const location = useLocation();
+  const whoami = useWhoami();
   return (
     <Sidebar {...props} className="border-none">
       <SidebarHeader className="py-3">
@@ -74,6 +77,16 @@ export default function LeftSidebar({
                   <NavLink to="/profile">Profile</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              {whoami?.role === 'admin' ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location.pathname === '/accounts'}
+                  >
+                    <NavLink to="/accounts">Accounts</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ) : null}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

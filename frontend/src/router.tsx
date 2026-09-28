@@ -1,6 +1,7 @@
 import getRouterBasename from '@/lib/router';
 import { Navigate, createBrowserRouter } from 'react-router-dom';
 
+import Accounts from 'pages/Accounts';
 import AuthCallback from 'pages/AuthCallback';
 import Dashboard from 'pages/Dashboard';
 import Element from 'pages/Element';
@@ -37,6 +38,10 @@ export const router = createBrowserRouter(
     {
       path: '/profile',
       element: <Profile />
+    },
+    {
+      path: '/accounts',
+      element: <Accounts />
     },
     {
       path: '/thread/:id?',
