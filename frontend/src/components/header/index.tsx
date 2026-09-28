@@ -106,6 +106,19 @@ const Header = memo(() => {
         >
           {location.pathname === '/status' ? 'Chat' : 'Status'}
         </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn(
+            'ml-1 text-muted-foreground',
+            location.pathname === '/profile' && 'bg-accent text-foreground'
+          )}
+          onClick={() =>
+            navigate(location.pathname === '/profile' ? '/' : '/profile')
+          }
+        >
+          {location.pathname === '/profile' ? 'Chat' : 'Profile'}
+        </Button>
       </div>
 
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">

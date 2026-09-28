@@ -8,6 +8,7 @@ import Env from 'pages/Env';
 import Home from 'pages/Home';
 import Login from 'pages/Login';
 import Models from 'pages/Models';
+import Profile from 'pages/Profile';
 import Status from 'pages/Status';
 import Thread from 'pages/Thread';
 
@@ -32,6 +33,10 @@ export const router = createBrowserRouter(
     {
       path: '/models',
       element: <Models />
+    },
+    {
+      path: '/profile',
+      element: <Profile />
     },
     {
       path: '/thread/:id?',

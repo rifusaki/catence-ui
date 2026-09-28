@@ -66,6 +66,14 @@ export default function LeftSidebar({
                   <NavLink to="/models">Models</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.pathname === '/profile'}
+                >
+                  <NavLink to="/profile">Profile</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
