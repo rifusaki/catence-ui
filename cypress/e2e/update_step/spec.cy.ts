@@ -1,5 +1,9 @@
+import { expandThinking } from '../../support/testUtils';
+
 describe('Update Step', () => {
   it('should be able to update a step', () => {
+    // Fork: tool1 renders inside a collapsed 'Thinking...' accordion.
+    expandThinking();
     cy.get(`#step-tool1`).click();
     cy.get('.step').should('have.length', 2);
     cy.get('.step').eq(0).should('contain', 'Hello!');

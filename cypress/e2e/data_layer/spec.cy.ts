@@ -21,7 +21,6 @@ const SELECTORS = {
   DELETE_THREAD: '#delete-thread',
   CONFIRM_BUTTON: "[role='alertdialog'] button.bg-primary",
   NEW_CHAT_BUTTON: '#new-chat-button',
-  CONFIRM_NEW: '#confirm',
   LOADER: '.lucide-loader'
 } as const;
 
@@ -128,8 +127,9 @@ const verifyContinueThread = () => {
 const startNewThread = () => {
   cy.step('Start new thread');
 
-  cy.get(SELECTORS.NEW_CHAT_BUTTON).click();
-  cy.get(SELECTORS.CONFIRM_NEW).click();
+  // Fork: NewChat is one-click — clicking the button clears the session
+  // directly, with no #new-chat-dialog/#confirm.
+  cy.get(SELECTORS.NEW_CHAT_BUTTON).click({ force: true });
 };
 
 const cleanupThreadHistory = () => {

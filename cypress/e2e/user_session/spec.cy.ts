@@ -1,14 +1,15 @@
 import { submitMessage } from '../../support/testUtils';
 
 function newSession() {
+  // Fork: NewChat is one-click — it clears the session and navigates home
+  // directly, with no #new-chat-dialog/#confirm.
   cy.get('#header')
     .get('#new-chat-button')
     .should('exist')
     .click({ force: true });
-  cy.get('#new-chat-dialog').should('exist');
-  cy.get('#confirm').should('exist').click();
 
-  cy.get('#new-chat-dialog').should('not.exist');
+  // Clearing the session empties the message list immediately.
+  cy.get('.step').should('have.length', 0);
 }
 
 describe('User Session', () => {

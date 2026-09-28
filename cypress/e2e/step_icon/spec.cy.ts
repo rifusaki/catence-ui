@@ -1,8 +1,11 @@
-import { submitMessage } from '../../support/testUtils';
+import { expandThinking, submitMessage } from '../../support/testUtils';
 
 describe('Step with Icon', () => {
   it('should display icons for steps with icon property', () => {
     submitMessage('Hello');
+
+    // Fork: the tool steps render inside a collapsed 'Thinking...' accordion.
+    expandThinking();
 
     cy.get('.step').should('have.length', 5);
 
@@ -28,8 +31,9 @@ describe('Step with Icon', () => {
     cy.get('#step-regular')
       .closest('.ai-message')
       .within(() => {
-        // Should have an avatar image
-        cy.get('img').should('exist');
+        // Fork: steps no longer render avatars/icons at all, so even a step
+        // without an icon has no avatar image.
+        cy.get('img').should('not.exist');
       });
 
     cy.get('#step-cpu')

@@ -40,13 +40,16 @@ describe('Copilot', { includeShadowDom: true }, () => {
     cy.step('Start conversation');
 
     submitMessage('Call func!');
-    cy.get('.step').should('have.length', 5);
+    // Fork: the system message's callback run renders as a collapsed
+    // 'Thinking...' trace and its assistant echo is suppressed, so only the
+    // 4 root steps are visible ('System message received' is hidden).
+    cy.get('.step').should('have.length', 4);
     cy.contains('.step', 'Function called with: Call func!').should(
       'be.visible'
     );
-    cy.contains('.step', 'System message received: Hello World!').should(
-      'be.visible'
-    );
+    cy.contains('.step', 'Hello World!').should('be.visible');
+    // The suppressed run still produces a trace trigger.
+    cy.get('button[aria-label="Show 1 thinking step"]').should('exist');
   });
 
   it('should persist thread', () => {
@@ -110,15 +113,16 @@ describe('Copilot', { includeShadowDom: true }, () => {
 
     cy.step('Start new thread from UI');
 
-    cy.get('#new-chat-button').click();
-    cy.get('#new-chat-dialog').should('exist');
-    cy.get('#new-chat-dialog').within(() => {
-      cy.get('#confirm').click();
-    });
+    // Fork: NewChat is one-click — clicking the button clears the chat
+    // directly, with no #new-chat-dialog/#confirm. It does not rotate the
+    // copilot thread id (that happens only via clearChainlitCopilotThreadId),
+    // so the id stays the same while the messages are cleared.
+    cy.get('#new-chat-button').click({ force: true });
+
+    cy.get('.step').should('have.length', 0);
 
     getCopilotThreadId((threadId) => {
-      expect(threadId).to.not.equal(null);
-      expect(threadId).to.not.equal(newThreadId);
+      expect(threadId).to.equal(newThreadId);
     });
   });
 

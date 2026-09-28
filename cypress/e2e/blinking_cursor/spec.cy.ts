@@ -1,4 +1,4 @@
-import { submitMessage } from '../../support/testUtils';
+import { expandThinking, submitMessage } from '../../support/testUtils';
 
 describe('Blinking cursor', () => {
   it('It should display until a step or message is sent', () => {
@@ -7,6 +7,9 @@ describe('Blinking cursor', () => {
 
     submitMessage('tool');
 
+    // Fork: the tool step renders inside a collapsed 'Thinking...' accordion;
+    // expand it so the trace step is part of the step list again.
+    expandThinking();
     cy.get('.step').should('have.length', 3);
     cy.get('.step').last().should('have.attr', 'data-step-type', 'tool');
     cy.get('.step').last().next('.loading-cursor').should('not.exist');

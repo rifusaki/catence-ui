@@ -16,6 +16,20 @@ export function submitMessage(message: string) {
   cy.get('#chat-submit').should('not.be.disabled').click();
 }
 
+/**
+ * Fork: trace steps render inside a collapsed 'Thinking...' accordion and
+ * Radix unmounts accordion content while closed, so trace steps are absent
+ * from the DOM until expanded. Waits for the first accordion and opens every
+ * one currently mounted.
+ */
+export function expandThinking() {
+  cy.get('button[aria-label^="Show "][aria-label*="thinking step"]')
+    .should('have.length.greaterThan', 0)
+    .each(($trigger) => {
+      cy.wrap($trigger).click({ force: true });
+    });
+}
+
 export function openHistory() {
   cy.get(`#chat-input`).should('not.be.disabled').type(`{upArrow}`);
 }

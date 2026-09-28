@@ -35,8 +35,8 @@ describe('Config overrides with chat profiles', () => {
     cy.get('[data-test="select-item:MCP Disabled"]').should('exist');
 
     // Change to MCP Enabled chat profile
+    // Fork: switching chat profiles is one-click — no confirmation dialog.
     cy.get('[data-test="select-item:MCP Enabled"]').click();
-    cy.get('#confirm').click();
 
     // Verify we're on a thread page after profile switch
     cy.location('pathname').should('eq', '/');
@@ -59,14 +59,14 @@ describe('Config overrides with chat profiles', () => {
 
     // Test switching to MCP Disabled profile
     cy.get('#chat-profiles').click();
+    // Fork: switching chat profiles is one-click — no confirmation dialog.
     cy.get('[data-test="select-item:MCP Disabled"]').click();
-    cy.get('#confirm').click();
 
     // Test that MCP button (lucide plug) does not exist on MCP Disabled profile
     cy.get('.lucide-plug').should('not.exist');
 
+    // Fork: NewChat is one-click — no #new-chat-dialog/#confirm.
     cy.get('#header').get('#new-chat-button').click({ force: true });
-    cy.get('#confirm').click();
 
     cy.get('#starter-mcp-test').should('exist');
 
@@ -75,8 +75,8 @@ describe('Config overrides with chat profiles', () => {
     submitMessage('hello');
     cy.get('.step').should('have.length', 2).eq(0).should('contain', 'hello');
     cy.get('#chat-profiles').click();
+    // Fork: switching chat profiles is one-click — no confirmation dialog.
     cy.get('[data-test="select-item:MCP Enabled"]').click();
-    cy.get('#confirm').click();
 
     // Verify MCP button appears again when switching back to MCP Enabled
     cy.get('.lucide-plug').should('exist').should('be.visible');

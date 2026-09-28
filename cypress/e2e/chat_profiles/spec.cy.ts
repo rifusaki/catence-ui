@@ -29,8 +29,8 @@ describe('Chat profiles', () => {
 
     // Change chat profile
 
+    // Fork: switching chat profiles is one-click — no confirmation dialog.
     cy.get('[data-test="select-item:GPT-4"]').click();
-    cy.get('#confirm').click();
 
     cy.get('#starter-ask-for-help')
       .should('be.visible')
@@ -49,8 +49,8 @@ describe('Chat profiles', () => {
         'starting chat with admin using the GPT-4 chat profile'
       );
 
+    // Fork: NewChat is one-click — no #new-chat-dialog/#confirm.
     cy.get('#header').get('#new-chat-button').click({ force: true });
-    cy.get('#confirm').click();
 
     cy.get('#starter-ask-for-help').should('exist');
 
@@ -59,8 +59,8 @@ describe('Chat profiles', () => {
     submitMessage('hello');
     cy.get('.step').should('have.length', 2).eq(0).should('contain', 'hello');
     cy.get('#chat-profiles').click();
+    // Fork: switching chat profiles is one-click — no confirmation dialog.
     cy.get('[data-test="select-item:GPT-5"]').click();
-    cy.get('#confirm').click();
 
     cy.get('#starter-ask-for-help').should('exist');
   });
