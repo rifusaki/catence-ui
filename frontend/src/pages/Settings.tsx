@@ -279,7 +279,7 @@ function SettingsTabs() {
         <TabsContent
           key={tab.value}
           value={tab.value}
-          className="mt-0 flex flex-1 flex-col overflow-hidden"
+          className="mt-0 data-[state=active]:flex flex-1 flex-col overflow-hidden"
         >
           {tab.content()}
         </TabsContent>

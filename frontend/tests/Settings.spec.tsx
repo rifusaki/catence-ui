@@ -98,6 +98,29 @@ describe('Settings page', () => {
     expect(screen.getByText('accounts tab')).toBeInTheDocument();
   });
 
+  it('hides inactive tab panels so they cannot steal the layout', () => {
+    whoamiMock.mockReturnValue({
+      username: 'ana',
+      role: 'admin',
+      athletes: 'all'
+    });
+    render(
+      <MemoryRouter initialEntries={['/settings?tab=status']}>
+        <Settings />
+      </MemoryRouter>
+    );
+
+    const active = screen.getByRole('tabpanel', { name: 'Status' });
+    const panels = screen.getAllByRole('tabpanel', { hidden: true });
+    expect(panels).toHaveLength(5);
+    expect(active).toHaveClass('data-[state=active]:flex');
+    for (const panel of panels) {
+      if (panel === active) continue;
+      expect(panel).toHaveAttribute('hidden');
+      expect(panel).toHaveClass('data-[state=inactive]:hidden');
+    }
+  });
+
   it('adds an athlete from the Athletes tab', async () => {
     whoamiMock.mockReturnValue({
       username: 'ana',
