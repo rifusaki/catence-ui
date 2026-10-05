@@ -8,8 +8,8 @@ import {
   IFeedback,
   IMessageElement,
   IStep,
+  addMessage,
   messagesState,
-  nestMessages,
   sessionIdState,
   sideViewState,
   updateMessageById,
@@ -23,12 +23,27 @@ import GenerationStatusBanner from '@/components/chat/GenerationStatusBanner';
 import { Messages } from '@/components/chat/Messages';
 import { useTranslation } from 'components/i18n/Translator';
 
-import { useGenerationStatusPoll } from '@/hooks/useGenerationStatus';
+import {
+  isGenerationActive,
+  useGenerationStatusPoll
+} from '@/hooks/useGenerationStatus';
 
 import { cotOverrideState } from '@/state/cot';
 
 interface Props {
   navigate?: (to: string) => void;
+}
+
+/** Every step id currently rendered, including nested children. */
+function collectStepIds(steps: IStep[]): string[] {
+  const ids: string[] = [];
+  for (const step of steps) {
+    ids.push(step.id);
+    if (step.steps?.length) {
+      ids.push(...collectStepIds(step.steps));
+    }
+  }
+  return ids;
 }
 
 const MessagesContainer = ({ navigate }: Props) => {
@@ -59,9 +74,17 @@ const MessagesContainer = ({ navigate }: Props) => {
         );
         if (!res.ok) return;
         const thread = (await res.json()) as { steps?: IStep[] };
-        if (thread?.steps?.length) {
-          setMessages(nestMessages(thread.steps));
-        }
+        const steps = thread?.steps;
+        if (!steps?.length) return;
+        setMessages((previous) => {
+          // Merge by id so a late-arriving snapshot can never clobber newer
+          // live state: only steps the client has not seen yet are added
+          // (parents come before children in the snapshot, so nesting works).
+          const seen = new Set(collectStepIds(previous));
+          const missing = steps.filter((step) => !seen.has(step.id));
+          if (!missing.length) return previous;
+          return missing.reduce((acc, step) => addMessage(acc, step), previous);
+        });
       } catch {
         // Recovery is best-effort; the next render or reload will catch up.
       }
@@ -74,12 +97,14 @@ const MessagesContainer = ({ navigate }: Props) => {
       wasRunningRef.current = false;
       return;
     }
-    // Reload the thread once a detached turn finishes so a refresh
-    // mid-generation still recovers the answer.
-    if (wasRunningRef.current && genStatus && genStatus.running === false) {
+    // Reload the thread once a detached turn finishes — or goes stale, which
+    // means the process behind it is gone — so the persisted answer lands and
+    // a refresh mid-generation still recovers it.
+    const active = isGenerationActive(genStatus);
+    if (wasRunningRef.current && !active) {
       recoverThread(threadId);
     }
-    wasRunningRef.current = genStatus?.running ?? false;
+    wasRunningRef.current = active;
   }, [threadId, genStatus, recoverThread]);
 
   const { t } = useTranslation();

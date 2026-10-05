@@ -73,3 +73,14 @@ export function useGenerationStatusPoll() {
 export function useGenerationStatus() {
   return useRecoilValue(generationStatusState);
 }
+
+/**
+ * A detached turn counts as active only while it is making progress. Once the
+ * sidecar heartbeat goes stale the run is treated as dead: the composer
+ * unlocks and the thread is recovered from the persisted steps. The console
+ * refreshes the heartbeat while it waits on the provider, so stale means the
+ * process behind the run is gone.
+ */
+export function isGenerationActive(status: GenerationStatus | null): boolean {
+  return !!status && status.running && !status.stale;
+}

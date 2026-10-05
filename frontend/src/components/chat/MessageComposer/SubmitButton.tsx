@@ -15,7 +15,10 @@ import {
 } from '@/components/ui/tooltip';
 import { Translator } from 'components/i18n';
 
-import { useGenerationStatus } from '@/hooks/useGenerationStatus';
+import {
+  isGenerationActive,
+  useGenerationStatus
+} from '@/hooks/useGenerationStatus';
 
 interface SubmitButtonProps {
   disabled?: boolean;
@@ -32,8 +35,9 @@ export default function SubmitButton({
   const genStatus = useGenerationStatus();
   // Socket task events fire task_end as soon as the detached turn is accepted,
   // so `loading` alone never covers generation. The sidecar-backed generation
-  // status does — including across a page refresh.
-  const isGenerating = genStatus?.running ?? false;
+  // status does — including across a page refresh. Stale statuses mean the run
+  // is dead, so the Send button comes back and the chat is usable again.
+  const isGenerating = isGenerationActive(genStatus);
 
   return (
     <TooltipProvider>

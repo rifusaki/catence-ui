@@ -32,7 +32,10 @@ import { useTranslation } from 'components/i18n/Translator';
 
 import { useQuery } from '@/hooks/query';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useGenerationStatus } from '@/hooks/useGenerationStatus';
+import {
+  isGenerationActive,
+  useGenerationStatus
+} from '@/hooks/useGenerationStatus';
 
 import { chatSettingsOpenState } from '@/state/project';
 import {
@@ -94,8 +97,8 @@ export default function MessageComposer({
   // Mirrors SubmitButton: socket `loading` ends when the detached turn is
   // accepted, so the sidecar-backed status is the real "thinking" signal.
   // Disabling the composer here prevents double-submits while keeping Stop
-  // (which ignores `disabled`) available.
-  const isGenerating = useGenerationStatus()?.running ?? false;
+  // (which ignores `disabled`) available. A stale run is treated as dead.
+  const isGenerating = isGenerationActive(useGenerationStatus());
 
   const disabled =
     _disabled ||
