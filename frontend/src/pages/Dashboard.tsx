@@ -230,12 +230,12 @@ function DashboardContent() {
             <h1 className="text-2xl font-semibold">Training dashboard</h1>
             <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-100">
               Data temporarily unavailable — a sync is running. View live
-              progress on the{' '}
+              progress in{' '}
               <Link
                 to="/settings?tab=status"
                 className="font-medium underline hover:no-underline"
               >
-                Status page
+                Settings → Status
               </Link>
               .
             </div>
@@ -279,18 +279,18 @@ function DashboardContent() {
             to="/settings?tab=status"
             className="font-medium underline hover:no-underline"
           >
-            Status →
+            Settings → Status
           </Link>
         </div>
         {isUnavailable ? (
           <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-100">
             Data temporarily unavailable — a sync is running. View live progress
-            on the{' '}
+            in{' '}
             <Link
               to="/settings?tab=status"
               className="font-medium underline hover:no-underline"
             >
-              Status page
+              Settings → Status
             </Link>
             .
           </div>
