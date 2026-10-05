@@ -47,6 +47,15 @@ if (typeof globalThis.DOMMatrix === 'undefined') {
   } as unknown as typeof DOMMatrix;
 }
 
+// Polyfill ResizeObserver for Radix components (checkbox bubble, sliders) in JSDOM
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
+
 afterEach(() => {
   cleanup();
 });

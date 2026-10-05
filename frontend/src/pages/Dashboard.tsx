@@ -232,7 +232,7 @@ function DashboardContent() {
               Data temporarily unavailable — a sync is running. View live
               progress on the{' '}
               <Link
-                to="/status"
+                to="/settings?tab=status"
                 className="font-medium underline hover:no-underline"
               >
                 Status page
@@ -276,7 +276,7 @@ function DashboardContent() {
         <div className="mt-3 rounded-md border border-sky-200 bg-sky-50 px-4 py-2 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/20 dark:text-sky-100">
           Sync moved to{' '}
           <Link
-            to="/status"
+            to="/settings?tab=status"
             className="font-medium underline hover:no-underline"
           >
             Status →
@@ -287,7 +287,7 @@ function DashboardContent() {
             Data temporarily unavailable — a sync is running. View live progress
             on the{' '}
             <Link
-              to="/status"
+              to="/settings?tab=status"
               className="font-medium underline hover:no-underline"
             >
               Status page

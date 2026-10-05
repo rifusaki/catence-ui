@@ -34,7 +34,7 @@ type RevisionPreview =
   | { status: 'ready'; revision: AthleteFileRevision; content: string }
   | { status: 'error'; revision: AthleteFileRevision; message: string };
 
-function ProfileContent() {
+export function ProfileContent() {
   const [roster, setRoster] = useState<AthleteRoster | null>(null);
   const [rosterLoaded, setRosterLoaded] = useState(false);
   const [rosterError, setRosterError] = useState<string | null>(null);

@@ -43,6 +43,9 @@ export type AccountsFailureCode =
   | 'last_admin'
   | 'tool_server_not_found'
   | 'tool_server_secrets_error'
+  | 'athlete_exists'
+  | 'athlete_create_failed'
+  | 'catalog_required'
   | 'network'
   | 'server_error'
   | 'invalid_response';
@@ -61,6 +64,12 @@ export type NewAccount = {
   password: string;
   role: AccountRole;
   athletes: AthleteGrant;
+};
+
+export type NewAthlete = {
+  id: string;
+  label: string;
+  setDefault: boolean;
 };
 
 export type AccountGrantsUpdate = {
@@ -109,7 +118,11 @@ const FAILURE_MESSAGES: Record<
   invalid_response: 'The Catence server returned an invalid accounts response.',
   tool_server_not_found: 'That tool server is not configured.',
   tool_server_secrets_error:
-    'The Console tool-server credential store is unusable.'
+    'The Console tool-server credential store is unusable.',
+  athlete_exists: 'That athlete id already exists.',
+  athlete_create_failed:
+    'The athlete could not be added — check the values and try again.',
+  catalog_required: 'Adding athletes requires a Catence catalog on this server.'
 };
 
 const SERVER_FAILURE_CODES: readonly AccountsFailureCode[] = [
@@ -120,7 +133,10 @@ const SERVER_FAILURE_CODES: readonly AccountsFailureCode[] = [
   'account_not_found',
   'last_admin',
   'tool_server_not_found',
-  'tool_server_secrets_error'
+  'tool_server_secrets_error',
+  'athlete_exists',
+  'athlete_create_failed',
+  'catalog_required'
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -178,6 +194,14 @@ export function buildUpdateAccountPayload(
   update: AccountGrantsUpdate
 ): AccountGrantsUpdate {
   return { username: update.username.trim(), athletes: update.athletes };
+}
+
+export function buildAddAthletePayload(athlete: NewAthlete): NewAthlete {
+  return {
+    id: athlete.id.trim(),
+    label: athlete.label.trim(),
+    setDefault: athlete.setDefault
+  };
 }
 
 export function parseAthleteGrant(value: unknown): AthleteGrant | null {
@@ -365,6 +389,34 @@ export async function loadAthleteOptions(
   if (!options)
     return { ok: false, failure: accountsFailure('invalid_response') };
   return { ok: true, data: options };
+}
+
+/**
+ * Adds a catalog athlete through the runtime, proxied (and admin-gated) by
+ * the Console. The roster is not returned — callers refresh it.
+ */
+export async function createAthlete(
+  apiOrigin: string,
+  athlete: NewAthlete,
+  fetchImpl: FetchImpl = fetch
+): Promise<AccountsOutcome<null>> {
+  let response: Response;
+  try {
+    response = await fetchImpl(athletesUrl(apiOrigin), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(buildAddAthletePayload(athlete))
+    });
+  } catch {
+    return { ok: false, failure: accountsFailure('network') };
+  }
+  const body = (await response.json().catch(() => null)) as ApiErrorBody | null;
+  if (!response.ok)
+    return {
+      ok: false,
+      failure: classifyAccountsFailure(response.status, body?.error)
+    };
+  return { ok: true, data: null };
 }
 
 async function postAccountsAction(

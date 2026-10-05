@@ -1,19 +1,12 @@
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 import SidebarTrigger from '@/components/header/SidebarTrigger';
 import {
   Sidebar,
   SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
   SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
   SidebarRail
 } from '@/components/ui/sidebar';
-
-import { useWhoami } from '@/hooks/useWhoami';
 
 import NewChatButton from '../header/NewChat';
 import SearchChats from './Search';
@@ -23,8 +16,6 @@ export default function LeftSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>) {
   const navigate = useNavigate();
-  const location = useLocation();
-  const whoami = useWhoami();
   return (
     <Sidebar {...props} className="border-none">
       <SidebarHeader className="py-3">
@@ -37,59 +28,6 @@ export default function LeftSidebar({
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={location.pathname === '/'}>
-                  <NavLink to="/">Home</NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={location.pathname === '/dashboard'}
-                >
-                  <NavLink to="/dashboard">Dashboard</NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={location.pathname === '/status'}
-                >
-                  <NavLink to="/status">Status</NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={location.pathname === '/models'}
-                >
-                  <NavLink to="/models">Models</NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={location.pathname === '/profile'}
-                >
-                  <NavLink to="/profile">Profile</NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              {whoami?.role === 'admin' ? (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location.pathname === '/accounts'}
-                  >
-                    <NavLink to="/accounts">Accounts</NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ) : null}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
         <ThreadHistory />
       </SidebarContent>
       <SidebarRail />

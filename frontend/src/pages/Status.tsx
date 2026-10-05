@@ -301,7 +301,7 @@ function DataSummaryCard({
   );
 }
 
-function StatusContent() {
+export function StatusContent() {
   const [roster, setRoster] = useState<AthleteRoster | null>(null);
   const [rosterLoaded, setRosterLoaded] = useState(false);
   const [athleteId, setAthleteId] = useState<string | null>(null);

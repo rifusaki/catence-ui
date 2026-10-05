@@ -1,4 +1,4 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 
 import { sideViewState, useConfig } from '@chainlit/react-client';
@@ -21,6 +21,7 @@ const Page = ({ children }: Props) => {
   const { config } = useConfig();
   const userEnv = useRecoilValue(userEnvState);
   const sideView = useRecoilValue(sideViewState);
+  const location = useLocation();
 
   if (config?.userEnv) {
     for (const key of config.userEnv || []) {
@@ -54,12 +55,17 @@ const Page = ({ children }: Props) => {
 
   const historyEnabled = config?.dataPersistence;
   const sidebarHidden = config?.ui?.default_sidebar_state === 'hidden';
+  // The left pane is a chat-only surface: settings and the dashboard are
+  // reachable from the top nav, and those pages use the full width.
+  const isChatRoute =
+    location.pathname === '/' || location.pathname.startsWith('/thread/');
+  const showSidebar = !!historyEnabled && !sidebarHidden && isChatRoute;
 
   return (
     <SidebarProvider
       defaultOpen={config?.ui.default_sidebar_state !== 'closed'}
     >
-      {historyEnabled && !sidebarHidden ? (
+      {showSidebar ? (
         <>
           <LeftSidebar />
           <SidebarInset className="max-h-svh min-w-0">

@@ -17,8 +17,6 @@ import {
 } from '@/components/ui/tooltip';
 import { Translator } from 'components/i18n';
 
-import { useWhoami } from '@/hooks/useWhoami';
-
 import { chatSettingsSidebarOpenState } from '@/state/project';
 
 import ApiKeys from './ApiKeys';
@@ -35,7 +33,6 @@ const Header = memo(() => {
   const navigate = useNavigate();
   const location = useLocation();
   const { config } = useConfig();
-  const whoami = useWhoami();
   const { chatSettingsInputs } = useChatData();
   const { open, openMobile, isMobile } = useSidebar();
   const setChatSettingsSidebarOpen = useSetRecoilState(
@@ -46,6 +43,11 @@ const Header = memo(() => {
 
   const historyEnabled = config?.dataPersistence;
   const sidebarHidden = config?.ui?.default_sidebar_state === 'hidden';
+  // The left pane only exists on chat routes; elsewhere the header must not
+  // offer a sidebar trigger or hide New chat behind the (absent) pane.
+  const isChatRoute =
+    location.pathname === '/' || location.pathname.startsWith('/thread/');
+  const sidebarAvailable = !!historyEnabled && !sidebarHidden && isChatRoute;
 
   const links = config?.ui?.header_links || [];
 
@@ -59,84 +61,45 @@ const Header = memo(() => {
       id="header"
     >
       <div className="flex items-center">
-        {historyEnabled && !sidebarHidden ? (
-          !sidebarOpen ? (
-            <SidebarTrigger />
-          ) : null
-        ) : null}
-        {historyEnabled && !sidebarHidden ? (
-          !sidebarOpen ? (
-            <NewChatButton navigate={navigate} />
-          ) : null
-        ) : (
+        {sidebarAvailable && !sidebarOpen ? <SidebarTrigger /> : null}
+        {!sidebarAvailable || !sidebarOpen ? (
           <NewChatButton navigate={navigate} />
-        )}
+        ) : null}
 
         <ChatProfiles navigate={navigate} />
         <Button
           variant="ghost"
           size="sm"
-          className="ml-1 text-muted-foreground"
-          onClick={() =>
-            navigate(location.pathname === '/dashboard' ? '/' : '/dashboard')
-          }
+          className={cn(
+            'ml-1 text-muted-foreground',
+            isChatRoute && 'bg-accent text-foreground'
+          )}
+          onClick={() => navigate('/')}
         >
-          {location.pathname === '/dashboard' ? 'Chat' : 'Dashboard'}
+          Chat
         </Button>
         <Button
           variant="ghost"
           size="sm"
           className={cn(
             'ml-1 text-muted-foreground',
-            location.pathname === '/models' && 'bg-accent text-foreground'
+            location.pathname === '/dashboard' && 'bg-accent text-foreground'
           )}
-          onClick={() =>
-            navigate(location.pathname === '/models' ? '/' : '/models')
-          }
+          onClick={() => navigate('/dashboard')}
         >
-          {location.pathname === '/models' ? 'Chat' : 'Models'}
+          Dashboard
         </Button>
         <Button
           variant="ghost"
           size="sm"
           className={cn(
             'ml-1 text-muted-foreground',
-            location.pathname === '/status' && 'bg-accent text-foreground'
+            location.pathname === '/settings' && 'bg-accent text-foreground'
           )}
-          onClick={() =>
-            navigate(location.pathname === '/status' ? '/' : '/status')
-          }
+          onClick={() => navigate('/settings')}
         >
-          {location.pathname === '/status' ? 'Chat' : 'Status'}
+          Settings
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className={cn(
-            'ml-1 text-muted-foreground',
-            location.pathname === '/profile' && 'bg-accent text-foreground'
-          )}
-          onClick={() =>
-            navigate(location.pathname === '/profile' ? '/' : '/profile')
-          }
-        >
-          {location.pathname === '/profile' ? 'Chat' : 'Profile'}
-        </Button>
-        {whoami?.role === 'admin' ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn(
-              'ml-1 text-muted-foreground',
-              location.pathname === '/accounts' && 'bg-accent text-foreground'
-            )}
-            onClick={() =>
-              navigate(location.pathname === '/accounts' ? '/' : '/accounts')
-            }
-          >
-            {location.pathname === '/accounts' ? 'Chat' : 'Accounts'}
-          </Button>
-        ) : null}
       </div>
 
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">

@@ -8,9 +8,11 @@ import {
   addAccount,
   athletesUrl,
   buildAddAccountPayload,
+  buildAddAthletePayload,
   buildUpdateAccountPayload,
   classifyAccountsFailure,
   clearToolServerSecret,
+  createAthlete,
   formatAthleteGrant,
   loadAccounts,
   loadAthleteOptions,
@@ -482,6 +484,82 @@ describe('loadAthleteOptions', () => {
     expect(outcome).toMatchObject({
       ok: false,
       failure: { code: 'invalid_response' }
+    });
+  });
+});
+
+describe('createAthlete', () => {
+  it('trims the payload fields', () => {
+    expect(
+      buildAddAthletePayload({
+        id: ' sam ',
+        label: '  Sam Smith  ',
+        setDefault: true
+      })
+    ).toEqual({ id: 'sam', label: 'Sam Smith', setDefault: true });
+  });
+
+  it('POSTs to the athletes endpoint and reports success', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const outcome = await createAthlete(
+      'https://catence.test',
+      { id: 'sam', label: 'Sam Smith', setDefault: true },
+      async (url, init) => {
+        calls.push({ url, init });
+        return jsonResponse(201, {
+          defaultAthleteId: 'sam',
+          athletes: [{ id: 'sam', label: 'Sam Smith' }]
+        });
+      }
+    );
+    expect(calls[0].url).toBe('https://catence.test/api/v1/athletes');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(JSON.parse(calls[0].init?.body as string)).toEqual({
+      id: 'sam',
+      label: 'Sam Smith',
+      setDefault: true
+    });
+    expect(outcome).toEqual({ ok: true, data: null });
+  });
+
+  it('maps a duplicate athlete to a readable message', async () => {
+    const outcome = await createAthlete(
+      'https://catence.test',
+      { id: 'sam', label: 'Sam', setDefault: false },
+      async () => jsonResponse(409, { error: { code: 'athlete_exists' } })
+    );
+    expect(outcome).toMatchObject({
+      ok: false,
+      failure: {
+        code: 'athlete_exists',
+        message: 'That athlete id already exists.'
+      }
+    });
+  });
+
+  it('surfaces the catalog requirement', async () => {
+    const outcome = await createAthlete(
+      'https://catence.test',
+      { id: 'sam', label: 'Sam', setDefault: false },
+      async () => jsonResponse(400, { error: { code: 'catalog_required' } })
+    );
+    expect(outcome).toMatchObject({
+      ok: false,
+      failure: { code: 'catalog_required' }
+    });
+  });
+
+  it('reports network failures', async () => {
+    const outcome = await createAthlete(
+      'https://catence.test',
+      { id: 'sam', label: 'Sam', setDefault: false },
+      async () => {
+        throw new Error('offline');
+      }
+    );
+    expect(outcome).toMatchObject({
+      ok: false,
+      failure: { code: 'network' }
     });
   });
 });

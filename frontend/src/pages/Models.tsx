@@ -55,7 +55,7 @@ const EMPTY_DRAFT: Draft = {
   variants: ''
 };
 
-function ModelsContent() {
+export function ModelsContent() {
   const [payload, setPayload] = useState<ModelsPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);

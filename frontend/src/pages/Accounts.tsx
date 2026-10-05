@@ -148,7 +148,7 @@ function GrantPicker({
   );
 }
 
-function AccountsContent() {
+export function AccountsContent() {
   const [snapshot, setSnapshot] = useState<AccountsSnapshot | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
