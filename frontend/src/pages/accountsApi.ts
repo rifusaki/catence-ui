@@ -46,6 +46,9 @@ export type AccountsFailureCode =
   | 'athlete_exists'
   | 'athlete_create_failed'
   | 'catalog_required'
+  | 'athlete_secrets_unavailable'
+  | 'athlete_secret_write_failed'
+  | 'athlete_secret_remove_failed'
   | 'network'
   | 'server_error'
   | 'invalid_response';
@@ -122,7 +125,14 @@ const FAILURE_MESSAGES: Record<
   athlete_exists: 'That athlete id already exists.',
   athlete_create_failed:
     'The athlete could not be added — check the values and try again.',
-  catalog_required: 'Adding athletes requires a Catence catalog on this server.'
+  catalog_required:
+    'Adding athletes requires a Catence catalog on this server.',
+  athlete_secrets_unavailable:
+    'The athlete credentials could not be loaded — check the athlete and try again.',
+  athlete_secret_write_failed:
+    'The credential could not be saved — check the value and try again.',
+  athlete_secret_remove_failed:
+    'The credential could not be removed — try again.'
 };
 
 const SERVER_FAILURE_CODES: readonly AccountsFailureCode[] = [
@@ -136,7 +146,10 @@ const SERVER_FAILURE_CODES: readonly AccountsFailureCode[] = [
   'tool_server_secrets_error',
   'athlete_exists',
   'athlete_create_failed',
-  'catalog_required'
+  'catalog_required',
+  'athlete_secrets_unavailable',
+  'athlete_secret_write_failed',
+  'athlete_secret_remove_failed'
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -417,6 +430,186 @@ export async function createAthlete(
       failure: classifyAccountsFailure(response.status, body?.error)
     };
   return { ok: true, data: null };
+}
+
+// Athlete provider credentials (admin-managed, write-only)
+
+export type AthleteSecretField = {
+  name: string;
+  configured: boolean;
+};
+
+export type AthleteSecretProvider = {
+  id: string;
+  label: string;
+  fields: AthleteSecretField[];
+};
+
+export type AthleteSecretsSnapshot = {
+  athleteId: string;
+  providers: AthleteSecretProvider[];
+};
+
+export type AthleteSecretUpdate = {
+  athleteId: string;
+  provider: string;
+  field: string;
+  value: string;
+};
+
+export type AthleteSecretRemoval = {
+  athleteId: string;
+  provider: string;
+  field: string;
+};
+
+export function athleteSecretsUrl(
+  apiOrigin: string,
+  athleteId?: string
+): string {
+  const base = `${apiOrigin}/api/v1/athlete-secrets`;
+  return athleteId
+    ? `${base}?athleteId=${encodeURIComponent(athleteId)}`
+    : base;
+}
+
+export function athleteSecretRemovalUrl(apiOrigin: string): string {
+  return `${apiOrigin}/api/v1/athlete-secrets/remove`;
+}
+
+export function buildAthleteSecretUpdatePayload(
+  update: AthleteSecretUpdate
+): AthleteSecretUpdate {
+  return {
+    athleteId: update.athleteId.trim(),
+    provider: update.provider.trim(),
+    field: update.field.trim(),
+    value: update.value
+  };
+}
+
+export function buildAthleteSecretRemovalPayload(
+  removal: AthleteSecretRemoval
+): AthleteSecretRemoval {
+  return {
+    athleteId: removal.athleteId.trim(),
+    provider: removal.provider.trim(),
+    field: removal.field.trim()
+  };
+}
+
+export function parseAthleteSecretField(
+  value: unknown
+): AthleteSecretField | null {
+  if (!isRecord(value)) return null;
+  const { name, configured } = value;
+  if (typeof name !== 'string' || !name) return null;
+  if (typeof configured !== 'boolean') return null;
+  return { name, configured };
+}
+
+export function parseAthleteSecretProvider(
+  value: unknown
+): AthleteSecretProvider | null {
+  if (!isRecord(value)) return null;
+  const { id, label, fields } = value;
+  if (typeof id !== 'string' || !id) return null;
+  if (!Array.isArray(fields)) return null;
+  const parsedFields: AthleteSecretField[] = [];
+  for (const entry of fields) {
+    const field = parseAthleteSecretField(entry);
+    if (!field) return null;
+    parsedFields.push(field);
+  }
+  return {
+    id,
+    label: typeof label === 'string' && label ? label : id,
+    fields: parsedFields
+  };
+}
+
+export function parseAthleteSecretsSnapshot(
+  value: unknown
+): AthleteSecretsSnapshot | null {
+  if (!isRecord(value)) return null;
+  const { athleteId, providers } = value;
+  if (typeof athleteId !== 'string' || !athleteId) return null;
+  if (!Array.isArray(providers)) return null;
+  const parsedProviders: AthleteSecretProvider[] = [];
+  for (const entry of providers) {
+    const provider = parseAthleteSecretProvider(entry);
+    if (!provider) return null;
+    parsedProviders.push(provider);
+  }
+  return { athleteId, providers: parsedProviders };
+}
+
+async function parseAthleteSecretsResponse(
+  response: Response
+): Promise<AccountsOutcome<AthleteSecretsSnapshot>> {
+  const body = (await response.json().catch(() => null)) as
+    | (AthleteSecretsSnapshot & ApiErrorBody)
+    | null;
+  if (!response.ok) {
+    return {
+      ok: false,
+      failure: classifyAccountsFailure(response.status, body?.error)
+    };
+  }
+  const snapshot = parseAthleteSecretsSnapshot(body);
+  if (!snapshot)
+    return { ok: false, failure: accountsFailure('invalid_response') };
+  return { ok: true, data: snapshot };
+}
+
+export async function loadAthleteSecrets(
+  apiOrigin: string,
+  athleteId: string,
+  fetchImpl: FetchImpl = fetch
+): Promise<AccountsOutcome<AthleteSecretsSnapshot>> {
+  let response: Response;
+  try {
+    response = await fetchImpl(athleteSecretsUrl(apiOrigin, athleteId));
+  } catch {
+    return { ok: false, failure: accountsFailure('network') };
+  }
+  return parseAthleteSecretsResponse(response);
+}
+
+export async function setAthleteSecret(
+  apiOrigin: string,
+  update: AthleteSecretUpdate,
+  fetchImpl: FetchImpl = fetch
+): Promise<AccountsOutcome<AthleteSecretsSnapshot>> {
+  let response: Response;
+  try {
+    response = await fetchImpl(athleteSecretsUrl(apiOrigin), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(buildAthleteSecretUpdatePayload(update))
+    });
+  } catch {
+    return { ok: false, failure: accountsFailure('network') };
+  }
+  return parseAthleteSecretsResponse(response);
+}
+
+export async function removeAthleteSecret(
+  apiOrigin: string,
+  removal: AthleteSecretRemoval,
+  fetchImpl: FetchImpl = fetch
+): Promise<AccountsOutcome<AthleteSecretsSnapshot>> {
+  let response: Response;
+  try {
+    response = await fetchImpl(athleteSecretRemovalUrl(apiOrigin), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(buildAthleteSecretRemovalPayload(removal))
+    });
+  } catch {
+    return { ok: false, failure: accountsFailure('network') };
+  }
+  return parseAthleteSecretsResponse(response);
 }
 
 async function postAccountsAction(

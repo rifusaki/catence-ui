@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { useWhoami } from '@/hooks/useWhoami';
 
+import { AthleteCredentialsDialog } from './AthleteCredentials';
 import {
   type AthleteOption,
   createAthlete,
@@ -44,6 +45,7 @@ function AthletesPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [managing, setManaging] = useState<AthleteOption | null>(null);
 
   const load = useCallback(async () => {
     const outcome = await loadAthleteOptions(apiOrigin);
@@ -126,6 +128,15 @@ function AthletesPanel() {
                 <span className="font-mono text-xs text-muted-foreground">
                   {athlete.id}
                 </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="ml-auto"
+                  onClick={() => setManaging(athlete)}
+                >
+                  Credentials
+                </Button>
               </div>
             ))}
           </CardContent>
@@ -188,6 +199,13 @@ function AthletesPanel() {
           </form>
         </CardContent>
       </Card>
+
+      {managing ? (
+        <AthleteCredentialsDialog
+          athlete={managing}
+          onClose={() => setManaging(null)}
+        />
+      ) : null}
     </div>
   );
 }

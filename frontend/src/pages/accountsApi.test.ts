@@ -6,9 +6,13 @@ import {
   accountsFailure,
   accountsUrl,
   addAccount,
+  athleteSecretRemovalUrl,
+  athleteSecretsUrl,
   athletesUrl,
   buildAddAccountPayload,
   buildAddAthletePayload,
+  buildAthleteSecretRemovalPayload,
+  buildAthleteSecretUpdatePayload,
   buildUpdateAccountPayload,
   classifyAccountsFailure,
   clearToolServerSecret,
@@ -16,19 +20,23 @@ import {
   formatAthleteGrant,
   loadAccounts,
   loadAthleteOptions,
+  loadAthleteSecrets,
   loadToolServers,
   loadWhoami,
   parseAccount,
   parseAccountsSnapshot,
   parseAthleteGrant,
   parseAthleteOptions,
+  parseAthleteSecretsSnapshot,
   parseToolServer,
   parseToolServerSecret,
   parseToolServersSnapshot,
   parseWhoami,
   removeAccount,
+  removeAthleteSecret,
   resetAccountPassword,
   saveToolServerSecret,
+  setAthleteSecret,
   toolServerSecretUrl,
   toolServersUrl,
   updateAccountGrants,
@@ -949,5 +957,200 @@ describe('tool server credentials', () => {
       ok: false,
       failure: { code: 'tool_server_not_found' }
     });
+  });
+});
+
+describe('athlete secrets API', () => {
+  const metadata = {
+    athleteId: 'athlete-1',
+    providers: [
+      {
+        id: 'garmin',
+        label: 'Garmin',
+        fields: [
+          { name: 'email', configured: true },
+          { name: 'password', configured: false }
+        ]
+      }
+    ]
+  };
+
+  it('builds the metadata, write, and removal URLs', () => {
+    expect(athleteSecretsUrl('https://catence.test')).toBe(
+      'https://catence.test/api/v1/athlete-secrets'
+    );
+    expect(athleteSecretsUrl('https://catence.test', 'athlete-1')).toBe(
+      'https://catence.test/api/v1/athlete-secrets?athleteId=athlete-1'
+    );
+    expect(athleteSecretsUrl('https://catence.test', 'a b')).toBe(
+      'https://catence.test/api/v1/athlete-secrets?athleteId=a%20b'
+    );
+    expect(athleteSecretRemovalUrl('https://catence.test')).toBe(
+      'https://catence.test/api/v1/athlete-secrets/remove'
+    );
+  });
+
+  it('trims payload identifiers but never touches the value', () => {
+    expect(
+      buildAthleteSecretUpdatePayload({
+        athleteId: ' athlete-1 ',
+        provider: ' garmin ',
+        field: ' email ',
+        value: ' secret '
+      })
+    ).toEqual({
+      athleteId: 'athlete-1',
+      provider: 'garmin',
+      field: 'email',
+      value: ' secret '
+    });
+    expect(
+      buildAthleteSecretRemovalPayload({
+        athleteId: ' athlete-1 ',
+        provider: ' garmin ',
+        field: ' email '
+      })
+    ).toEqual({ athleteId: 'athlete-1', provider: 'garmin', field: 'email' });
+  });
+
+  it('parses the metadata snapshot and falls back to the provider id', () => {
+    const parsed = parseAthleteSecretsSnapshot(metadata);
+    expect(parsed?.athleteId).toBe('athlete-1');
+    expect(parsed?.providers[0]).toEqual({
+      id: 'garmin',
+      label: 'Garmin',
+      fields: [
+        { name: 'email', configured: true },
+        { name: 'password', configured: false }
+      ]
+    });
+    expect(
+      parseAthleteSecretsSnapshot({
+        athleteId: 'athlete-1',
+        providers: [{ id: 'strava', fields: [] }]
+      })
+    ).toMatchObject({ providers: [{ id: 'strava', label: 'strava' }] });
+    expect(parseAthleteSecretsSnapshot({ providers: [] })).toBeNull();
+    expect(
+      parseAthleteSecretsSnapshot({
+        athleteId: 'athlete-1',
+        providers: [{ id: 'garmin', fields: 'nope' }]
+      })
+    ).toBeNull();
+  });
+
+  it('loads metadata through the athlete-scoped endpoint', async () => {
+    const calls: string[] = [];
+    const fetchImpl: FetchImpl = async (input) => {
+      calls.push(String(input));
+      return jsonResponse(200, metadata);
+    };
+    const outcome = await loadAthleteSecrets(
+      'https://catence.test',
+      'athlete-1',
+      fetchImpl
+    );
+    expect(calls).toEqual([
+      'https://catence.test/api/v1/athlete-secrets?athleteId=athlete-1'
+    ]);
+    expect(outcome).toMatchObject({
+      ok: true,
+      data: { athleteId: 'athlete-1' }
+    });
+  });
+
+  it('saves a credential with PUT and a JSON body', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl: FetchImpl = async (input, init) => {
+      calls.push({ url: String(input), init });
+      return jsonResponse(200, metadata);
+    };
+    const outcome = await setAthleteSecret(
+      'https://catence.test',
+      {
+        athleteId: 'athlete-1',
+        provider: 'garmin',
+        field: 'email',
+        value: 'new@example.test'
+      },
+      fetchImpl
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('https://catence.test/api/v1/athlete-secrets');
+    expect(calls[0].init?.method).toBe('PUT');
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      athleteId: 'athlete-1',
+      provider: 'garmin',
+      field: 'email',
+      value: 'new@example.test'
+    });
+    expect(outcome).toMatchObject({ ok: true });
+  });
+
+  it('removes a credential through the removal endpoint', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl: FetchImpl = async (input, init) => {
+      calls.push({ url: String(input), init });
+      return jsonResponse(200, metadata);
+    };
+    const outcome = await removeAthleteSecret(
+      'https://catence.test',
+      { athleteId: 'athlete-1', provider: 'garmin', field: 'password' },
+      fetchImpl
+    );
+    expect(calls[0].url).toBe(
+      'https://catence.test/api/v1/athlete-secrets/remove'
+    );
+    expect(calls[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      athleteId: 'athlete-1',
+      provider: 'garmin',
+      field: 'password'
+    });
+    expect(outcome).toMatchObject({ ok: true });
+  });
+
+  it('maps runtime failures and malformed replies', async () => {
+    expect(
+      await loadAthleteSecrets('https://catence.test', 'missing', async () =>
+        jsonResponse(400, { error: { code: 'athlete_secrets_unavailable' } })
+      )
+    ).toMatchObject({
+      ok: false,
+      failure: { code: 'athlete_secrets_unavailable' }
+    });
+    expect(
+      await setAthleteSecret(
+        'https://catence.test',
+        {
+          athleteId: 'athlete-1',
+          provider: 'garmin',
+          field: 'nope',
+          value: 'v'
+        },
+        async () =>
+          jsonResponse(400, {
+            error: { code: 'athlete_secret_write_failed' }
+          })
+      )
+    ).toMatchObject({
+      ok: false,
+      failure: { code: 'athlete_secret_write_failed' }
+    });
+    expect(
+      await loadAthleteSecrets('https://catence.test', 'athlete-1', async () =>
+        jsonResponse(200, { athleteId: 'athlete-1' })
+      )
+    ).toMatchObject({ ok: false, failure: { code: 'invalid_response' } });
+    const failing: FetchImpl = async () => {
+      throw new TypeError('Failed to fetch');
+    };
+    expect(
+      await removeAthleteSecret(
+        'https://catence.test',
+        { athleteId: 'athlete-1', provider: 'garmin', field: 'password' },
+        failing
+      )
+    ).toMatchObject({ ok: false, failure: { code: 'network' } });
   });
 });
