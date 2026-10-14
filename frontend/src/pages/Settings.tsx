@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useWhoami } from '@/hooks/useWhoami';
 
 import { AthleteCredentialsDialog } from './AthleteCredentials';
+import { McpExposureContent } from './McpExposure';
 import {
   type AthleteOption,
   createAthlete,
@@ -253,6 +254,12 @@ function SettingsTabs() {
           content: () => <AthletesPanel />
         },
         {
+          value: 'mcp',
+          label: 'MCP Exposure',
+          adminOnly: true,
+          content: () => <McpExposureContent />
+        },
+        {
           value: 'accounts',
           label: 'Accounts',
           adminOnly: true,
@@ -283,7 +290,7 @@ function SettingsTabs() {
         <h1 className="text-2xl font-semibold">Settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Chat preferences, server status, and — for administrators — models,
-          athletes and Console accounts.
+          athletes, MCP exposure and Console accounts.
         </p>
         <TabsList className="mt-4 h-auto flex-wrap justify-start">
           {tabs.map((tab) => (
