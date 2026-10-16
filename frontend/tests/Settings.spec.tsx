@@ -18,6 +18,9 @@ vi.mock('pages/Status', () => ({
 vi.mock('pages/Models', () => ({
   ModelsContent: () => <div>models tab</div>
 }));
+vi.mock('pages/AutoSync', () => ({
+  AutoSyncContent: () => <div>auto-sync tab</div>
+}));
 vi.mock('pages/Accounts', () => ({
   AccountsContent: () => <div>accounts tab</div>
 }));
@@ -91,6 +94,7 @@ describe('Settings page', () => {
       'Status',
       'Models',
       'Athletes',
+      'Auto-Sync',
       'Accounts'
     ]) {
       expect(screen.getByRole('tab', { name })).toBeInTheDocument();
@@ -112,7 +116,7 @@ describe('Settings page', () => {
 
     const active = screen.getByRole('tabpanel', { name: 'Status' });
     const panels = screen.getAllByRole('tabpanel', { hidden: true });
-    expect(panels).toHaveLength(5);
+    expect(panels).toHaveLength(7);
     expect(active).toHaveClass('data-[state=active]:flex');
     for (const panel of panels) {
       if (panel === active) continue;

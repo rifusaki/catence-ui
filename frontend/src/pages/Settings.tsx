@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useWhoami } from '@/hooks/useWhoami';
 
 import { AthleteCredentialsDialog } from './AthleteCredentials';
+import { AutoSyncContent } from './AutoSync';
 import { McpExposureContent } from './McpExposure';
 import {
   type AthleteOption,
@@ -254,6 +255,12 @@ function SettingsTabs() {
           content: () => <AthletesPanel />
         },
         {
+          value: 'auto-sync',
+          label: 'Auto-Sync',
+          adminOnly: true,
+          content: () => <AutoSyncContent />
+        },
+        {
           value: 'mcp',
           label: 'MCP Exposure',
           adminOnly: true,
@@ -290,7 +297,7 @@ function SettingsTabs() {
         <h1 className="text-2xl font-semibold">Settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Chat preferences, server status, and — for administrators — models,
-          athletes, MCP exposure and Console accounts.
+          athletes, auto-sync, MCP exposure and Console accounts.
         </p>
         <TabsList className="mt-4 h-auto flex-wrap justify-start">
           {tabs.map((tab) => (
