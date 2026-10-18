@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   type FetchImpl,
+  accountKeysFor,
   buildCreateMcpKeyPayload,
   buildRollMcpKeyPayload,
   classifyMcpKeyFailure,
@@ -80,6 +81,26 @@ describe('buildCreateMcpKeyPayload', () => {
     expect(buildCreateMcpKeyPayload({ account: 'alex', label: '   ' })).toEqual(
       { account: 'alex' }
     );
+  });
+});
+
+describe('accountKeysFor', () => {
+  const keys = [
+    { ...activeKey, revokedAt: null },
+    { ...revokedKey, account: 'sam', revokedAt: '2026-10-18T09:00:00.000Z' },
+    { ...activeKey, id: 'key-3', account: 'sam', revokedAt: null }
+  ];
+
+  it('narrows the registry to one account, keeping revoked keys', () => {
+    expect(accountKeysFor(keys, 'alex')).toEqual([
+      { ...activeKey, revokedAt: null }
+    ]);
+    expect(accountKeysFor(keys, 'sam')).toHaveLength(2);
+  });
+
+  it('returns an empty list for an account without keys', () => {
+    expect(accountKeysFor(keys, 'nobody')).toEqual([]);
+    expect(accountKeysFor([], 'alex')).toEqual([]);
   });
 });
 

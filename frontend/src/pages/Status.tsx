@@ -4,6 +4,7 @@ import Page from 'pages/Page';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { displayTimestamp, useSync } from '@/hooks/useSync';
@@ -166,6 +167,7 @@ function SyncCard({
   onAthleteChange: (id: string) => void;
 }) {
   const { status, starting, syncError, start } = useSync(athleteId);
+  const [backfillDate, setBackfillDate] = useState('');
   const runningCount = status?.progress.running.length ?? 0;
 
   return (
@@ -226,6 +228,37 @@ function SyncCard({
               {displayTimestamp(status?.lastSync?.lastCompletedAt ?? null)}
             </span>
           )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Input
+            type="date"
+            aria-label="Backfill start date"
+            title="Backfill start date"
+            value={backfillDate}
+            disabled={starting || runningCount > 0 || !athleteId}
+            onChange={(event) => setBackfillDate(event.target.value)}
+            className="w-auto"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={
+              starting || !athleteId || runningCount > 0 || !backfillDate
+            }
+            title={
+              !athleteId
+                ? 'Athlete roster unavailable — select an athlete first.'
+                : 'Re-import history from the chosen date (catence-data backfill).'
+            }
+            onClick={() => void start({ backfill: true, from: backfillDate })}
+          >
+            Backfill history
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            Re-imports provider history from the chosen date backwards, without
+            advancing the incremental sync cursors.
+          </span>
         </div>
 
         {syncError ? (

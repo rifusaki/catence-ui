@@ -130,6 +130,15 @@ export function buildRollMcpKeyPayload(input: {
   return { id: input.id.trim(), account: input.account.trim() };
 }
 
+/**
+ * The keys belonging to one account. The account settings page is scoped to
+ * the signed-in account: for members the Console already filters server-side;
+ * for admins the full registry arrives and this narrows it to their own keys.
+ */
+export function accountKeysFor(keys: McpKey[], account: string): McpKey[] {
+  return keys.filter((key) => key.account === account);
+}
+
 export function parseMcpKey(value: unknown): McpKey | null {
   if (!isRecord(value)) return null;
   const { id, label, account, createdAt, revokedAt } = value;

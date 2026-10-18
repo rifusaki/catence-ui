@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
+import { AccountApiKeysContent } from 'pages/AccountApiKeys';
 import { AccountsContent } from 'pages/Accounts';
 import { ModelsContent } from 'pages/Models';
 import Page from 'pages/Page';
@@ -243,6 +244,12 @@ function SettingsTabs() {
           content: () => <StatusContent />
         },
         {
+          value: 'api-keys',
+          label: 'API keys',
+          adminOnly: false,
+          content: () => <AccountApiKeysContent />
+        },
+        {
           value: 'models',
           label: 'Models',
           adminOnly: true,
@@ -296,8 +303,9 @@ function SettingsTabs() {
       <div className="border-b px-6 pt-6 pb-4">
         <h1 className="text-2xl font-semibold">Settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Chat preferences, server status, and — for administrators — models,
-          athletes, auto-sync, MCP exposure and Console accounts.
+          Chat preferences, server status, and your MCP API keys — plus, for
+          administrators, models, athletes, auto-sync, MCP exposure and Console
+          accounts.
         </p>
         <TabsList className="mt-4 h-auto flex-wrap justify-start">
           {tabs.map((tab) => (

@@ -71,6 +71,7 @@ describe('Settings page', () => {
 
     expect(screen.getByRole('tab', { name: 'Profile' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Status' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'API keys' })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Models' })).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Athletes' })).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Accounts' })).toBeNull();
@@ -92,6 +93,7 @@ describe('Settings page', () => {
     for (const name of [
       'Profile',
       'Status',
+      'API keys',
       'Models',
       'Athletes',
       'Auto-Sync',
@@ -116,7 +118,7 @@ describe('Settings page', () => {
 
     const active = screen.getByRole('tabpanel', { name: 'Status' });
     const panels = screen.getAllByRole('tabpanel', { hidden: true });
-    expect(panels).toHaveLength(7);
+    expect(panels).toHaveLength(8);
     expect(active).toHaveClass('data-[state=active]:flex');
     for (const panel of panels) {
       if (panel === active) continue;

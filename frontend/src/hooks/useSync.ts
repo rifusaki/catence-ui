@@ -20,6 +20,36 @@ const apiOrigin = (
   import.meta.env.VITE_CATENCE_API_ORIGIN || window.location.origin
 ).replace(/\/$/, '');
 
+export type SyncStartOptions = {
+  /** Extend history backwards from `from` instead of an incremental sync. */
+  backfill?: boolean;
+  /** YYYY-MM-DD; required when backfill is set. */
+  from?: string;
+};
+
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The POST /api/v1/sync body for a start request: a backfill extends history
+ * backwards from `from` (required, YYYY-MM-DD); anything else is the regular
+ * incremental sync with model discovery.
+ */
+export function buildSyncStartBody(
+  athleteId: string,
+  options?: SyncStartOptions
+): { error: string } | { body: Record<string, unknown> } {
+  if (options?.backfill === true) {
+    const from = options.from?.trim() ?? '';
+    if (!DATE_PATTERN.test(from)) {
+      return { error: 'Backfill needs a start date in YYYY-MM-DD format.' };
+    }
+    return { body: { athleteId, provider: 'all', backfill: true, from } };
+  }
+  return {
+    body: { athleteId, provider: 'all', refresh: false, refreshModels: true }
+  };
+}
+
 /**
  * Detached sync trigger with live progress. The runtime spawns its own
  * `catence-data sync` child, so leaving this page (or the browser) never
@@ -74,39 +104,43 @@ export function useSync(athleteId: string | null) {
     return () => clearInterval(timer);
   }, [athleteId, status?.progress.running.length]);
 
-  const start = useCallback(async () => {
-    if (startingRef.current || !athleteId) return;
-    startingRef.current = true;
-    setStarting(true);
-    setSyncError(null);
-    try {
-      const response = await fetch(`${apiOrigin}/api/v1/sync`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          athleteId,
-          provider: 'all',
-          refresh: false,
-          refreshModels: true
-        })
-      });
-      const result = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(
-          result?.error?.message ?? `Sync failed to start (${response.status}).`
-        );
+  const start = useCallback(
+    async (options?: SyncStartOptions) => {
+      if (startingRef.current || !athleteId) return;
+      const built = buildSyncStartBody(athleteId, options);
+      if ('error' in built) {
+        setSyncError(built.error);
+        return;
       }
-      // Discovery runs before the sync child spawns and never blocks it; its
-      // failure is only reported as a warning on the accepted response.
-      if (result?.warning) setSyncError(String(result.warning));
-      // The polling effects above pick the run up within seconds.
-    } catch (caught) {
-      setSyncError(caught instanceof Error ? caught.message : String(caught));
-    } finally {
-      startingRef.current = false;
-      setStarting(false);
-    }
-  }, [athleteId]);
+      startingRef.current = true;
+      setStarting(true);
+      setSyncError(null);
+      try {
+        const response = await fetch(`${apiOrigin}/api/v1/sync`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(built.body)
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(
+            result?.error?.message ??
+              `Sync failed to start (${response.status}).`
+          );
+        }
+        // Discovery runs before the sync child spawns and never blocks it; its
+        // failure is only reported as a warning on the accepted response.
+        if (result?.warning) setSyncError(String(result.warning));
+        // The polling effects above pick the run up within seconds.
+      } catch (caught) {
+        setSyncError(caught instanceof Error ? caught.message : String(caught));
+      } finally {
+        startingRef.current = false;
+        setStarting(false);
+      }
+    },
+    [athleteId]
+  );
 
   return { status, starting, syncError, start };
 }
