@@ -7,7 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { displayTimestamp, useSync } from '@/hooks/useSync';
+import {
+  displayTimestamp,
+  trainingpeaksAuthExpired,
+  useSync
+} from '@/hooks/useSync';
 
 type AthleteRoster = {
   defaultAthleteId: string;
@@ -169,6 +173,7 @@ function SyncCard({
   const { status, starting, syncError, start } = useSync(athleteId);
   const [backfillDate, setBackfillDate] = useState('');
   const runningCount = status?.progress.running.length ?? 0;
+  const tpExpired = trainingpeaksAuthExpired(status);
 
   return (
     <Card>
@@ -260,6 +265,14 @@ function SyncCard({
             advancing the incremental sync cursors.
           </span>
         </div>
+
+        {tpExpired ? (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-100">
+            TrainingPeaks session expired — re-paste your{' '}
+            <code className="font-mono text-xs">Production_tpAuth</code> cookie
+            in Settings → Athletes → Credentials.
+          </div>
+        ) : null}
 
         {syncError ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-100">

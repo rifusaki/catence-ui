@@ -13,8 +13,28 @@ type SyncStatus = {
   lastSync: {
     lastCompletedAt: string | null;
     providers: Record<string, string>;
+    recentRuns?: Array<{
+      provider?: string;
+      status?: string;
+      error_count?: number;
+    }>;
   } | null;
 };
+
+/**
+ * A recently completed TrainingPeaks run with errors means the browser
+ * session cookie expired (it does every few weeks). The Console turns this
+ * into a re-paste prompt; the stored value itself is never readable.
+ */
+export function trainingpeaksAuthExpired(status: SyncStatus | null): boolean {
+  const runs = status?.lastSync?.recentRuns ?? [];
+  return runs.some(
+    (run) =>
+      run.provider === 'trainingpeaks' &&
+      String(run.status ?? '').startsWith('completed') &&
+      (run.error_count ?? 0) > 0
+  );
+}
 
 const apiOrigin = (
   import.meta.env.VITE_CATENCE_API_ORIGIN || window.location.origin
