@@ -24,15 +24,19 @@ type SyncStatus = {
 /**
  * A recently completed TrainingPeaks run with errors means the browser
  * session cookie expired (it does every few weeks). The Console turns this
- * into a re-paste prompt; the stored value itself is never readable.
+ * into a re-paste prompt; the stored value itself is never readable. Only
+ * the latest TrainingPeaks run counts: a clean run after a failed one
+ * means the cookie works and the banner must clear.
  */
 export function trainingpeaksAuthExpired(status: SyncStatus | null): boolean {
   const runs = status?.lastSync?.recentRuns ?? [];
-  return runs.some(
-    (run) =>
-      run.provider === 'trainingpeaks' &&
-      String(run.status ?? '').startsWith('completed') &&
-      (run.error_count ?? 0) > 0
+  const latestTrainingpeaksRun = runs.find(
+    (run) => run.provider === 'trainingpeaks'
+  );
+  if (!latestTrainingpeaksRun) return false;
+  return (
+    String(latestTrainingpeaksRun.status ?? '').startsWith('completed') &&
+    (latestTrainingpeaksRun.error_count ?? 0) > 0
   );
 }
 

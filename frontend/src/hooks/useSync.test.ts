@@ -115,4 +115,46 @@ describe('trainingpeaksAuthExpired', () => {
       })
     ).toBe(false);
   });
+
+  it('clears once a clean TrainingPeaks run follows a failed one', () => {
+    // recentRuns is newest-first: the cookie works again after the re-paste,
+    // so the older failed run must not keep the banner up.
+    expect(
+      trainingpeaksAuthExpired({
+        athleteId: 'alex',
+        progress: { running: [] },
+        lastSync: {
+          lastCompletedAt: null,
+          providers: {},
+          recentRuns: [
+            { provider: 'trainingpeaks', status: 'completed', error_count: 0 },
+            {
+              provider: 'trainingpeaks',
+              status: 'completed_with_errors',
+              error_count: 3
+            }
+          ]
+        }
+      })
+    ).toBe(false);
+    expect(
+      trainingpeaksAuthExpired({
+        athleteId: 'alex',
+        progress: { running: [] },
+        lastSync: {
+          lastCompletedAt: null,
+          providers: {},
+          recentRuns: [
+            {
+              provider: 'trainingpeaks',
+              status: 'completed_with_errors',
+              error_count: 3
+            },
+            { provider: 'garmin', status: 'completed', error_count: 0 },
+            { provider: 'trainingpeaks', status: 'completed', error_count: 0 }
+          ]
+        }
+      })
+    ).toBe(true);
+  });
 });
