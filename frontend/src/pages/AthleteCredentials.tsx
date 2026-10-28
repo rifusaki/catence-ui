@@ -39,6 +39,15 @@ const apiOrigin = (
 type PendingRemoval = { provider: AthleteSecretProvider; field: string };
 
 /**
+ * Per-provider setup hints. Values are never displayed; these only explain
+ * where to get a fresh credential and what expires when.
+ */
+const PROVIDER_HINTS: Record<string, string> = {
+  trainingpeaks:
+    'Paste the Production_tpAuth cookie value (browser DevTools → Application → Cookies → app.trainingpeaks.com). It is a browser session cookie: expect it to expire every few weeks, then re-paste a fresh one here.'
+};
+
+/**
  * Admin dialog for one athlete's provider credentials. Values are write-only:
  * the runtime returns only field names and configured flags, so inputs are
  * never prefilled and are cleared after every save.
@@ -157,6 +166,11 @@ export function AthleteCredentialsDialog({
             providers.map((provider) => (
               <section key={provider.id} className="grid gap-2">
                 <h3 className="text-sm font-medium">{provider.label}</h3>
+                {PROVIDER_HINTS[provider.id] ? (
+                  <p className="text-xs text-muted-foreground">
+                    {PROVIDER_HINTS[provider.id]}
+                  </p>
+                ) : null}
                 {provider.fields.map((field) => {
                   const key = draftKey(provider.id, field.name);
                   const busy = busyKey === key;
